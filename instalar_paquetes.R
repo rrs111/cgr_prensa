@@ -9,7 +9,7 @@ paquetes <- c(
   # scraping
   "rvest", "polite", "httr2", "chromote",
   # texto
-  "tidytext", "stopwords", "SnowballC", "widyr", "textclean",
+  "tidytext", "stopwords", "SnowballC", "textclean",
   # datos
   "arrow", "digest", "fs",
   # app (la nube de palabras se hace con plotly, no con wordcloud2, para evitar

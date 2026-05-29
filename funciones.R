@@ -108,30 +108,46 @@ limpiar_texto <- function(x) {
 # Fuentes y fechas
 # —--------------------------------------------------------------------------
 
-# Nombre legible de cada fuente para mostrar en la app
+# Nombre legible de cada fuente para mostrar en la app.
+# Los nombres se alinean con los del proyecto prensa_chile (y su muestra de
+# 10.000 noticias) para que las fuentes scrapeadas por nosotros y las importadas
+# de la muestra se agrupen como una sola.
 recodificar_fuentes <- function(data) {
   data |>
-    mutate(fuente = case_match(
-      fuente,
-      "emol"           ~ "Emol",
-      "latercera"      ~ "La Tercera",
-      "lasegunda"      ~ "La Segunda",
-      "biobio"         ~ "BioBioChile",
-      "ciper"          ~ "CIPER",
-      "elmostrador"    ~ "El Mostrador",
-      "cooperativa"    ~ "Cooperativa",
-      "df"             ~ "Diario Financiero",
-      "exante"         ~ "Ex-Ante",
-      "cnnchile"       ~ "CNN Chile",
-      "t13"            ~ "T13",
-      "pauta"          ~ "Pauta",
-      "eldinamo"       ~ "El Dínamo",
-      "eldesconcierto" ~ "El Desconcierto",
-      "interferencia"  ~ "Interferencia",
-      "ellibero"       ~ "El Líbero",
-      "theclinic"      ~ "The Clinic",
-      .default = fuente
-    ))
+    mutate(fuente = {
+      f <- as.character(fuente)
+      out <- case_match(
+        f,
+        "emol"           ~ "Emol",
+        "latercera"      ~ "La Tercera",
+        "lasegunda"      ~ "La Segunda",
+        "biobio"         ~ "Radio BíoBío",
+        "ciper"          ~ "Ciper",
+        "elmostrador"    ~ "El Mostrador",
+        "cooperativa"    ~ "Cooperativa",
+        "df"             ~ "D. Financiero",
+        "exante"         ~ "Ex-Ante",
+        "cnnchile"       ~ "CNN Chile",
+        "t13"            ~ "T13",
+        "pauta"          ~ "Pauta",
+        "eldinamo"       ~ "El Dínamo",
+        "eldesconcierto" ~ "El Desconcierto",
+        "interferencia"  ~ "Interferencia",
+        "ellibero"       ~ "El Líbero",
+        "theclinic"      ~ "The Clinic",
+        .default = f
+      )
+      # Marcar como UTF-8 para que coincida con los datos externos (la muestra)
+      # aun bajo un locale C, y unificar variantes de nombre.
+      Encoding(out) <- "UTF-8"
+      out <- case_match(out,
+        "BioBioChile"       ~ "Radio BíoBío",
+        "Diario Financiero" ~ "D. Financiero",
+        "CIPER"             ~ "Ciper",
+        .default = out)
+      Encoding(out) <- "UTF-8"
+      out
+    })
 }
 
 mes_a_numero <- function(x) {

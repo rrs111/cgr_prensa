@@ -155,12 +155,6 @@ generar_sinteticos <- function() {
     count(fuente, palabra, wt = n, name = "n") |>
     tidytext::bind_tf_idf(palabra, fuente, n)
 
-  # correlaciones sintéticas plausibles
-  pares <- expand.grid(item1 = vocab, item2 = vocab, stringsAsFactors = FALSE) |>
-    filter(item1 != item2) |>
-    mutate(correlation = round(runif(n(), 0.05, 0.6), 3)) |>
-    filter(correlation > 0.12)
-
   metricas <- list(
     total = nrow(datos),
     semana_actual = sum(datos$semana == max(semanas)),
@@ -171,7 +165,7 @@ generar_sinteticos <- function() {
 
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
-       correlacion = pares, metricas = metricas, sintetico = TRUE)
+       metricas = metricas, sintetico = TRUE)
 }
 
 # --- cargar todo ------------------------------------------------------------
@@ -186,8 +180,6 @@ cargar_todo <- function() {
   if (is.null(noticias_semana)) noticias_semana <- count(datos, semana, fuente, name = "n_noticias")
   tfidf_fuente <- cargar_archivo("cgr_tfidf_fuente.parquet")
   if (is.null(tfidf_fuente)) tfidf_fuente <- tibble(fuente = character(), palabra = character(), n = integer(), tf_idf = numeric())
-  correlacion <- cargar_archivo("cgr_correlacion.parquet")
-  if (is.null(correlacion)) correlacion <- tibble(item1 = character(), item2 = character(), correlation = numeric())
   metricas <- cargar_archivo("cgr_metricas.rds")
   if (is.null(metricas)) metricas <- list(
     total = nrow(datos),
@@ -197,7 +189,7 @@ cargar_todo <- function() {
 
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
-       correlacion = correlacion, metricas = metricas, sintetico = FALSE)
+       metricas = metricas, sintetico = FALSE)
 }
 
 D <- cargar_todo()
@@ -317,25 +309,6 @@ ui <- page_navbar(
       ),
       card(card_header(textOutput("n_titulo_tabla")),
            withSpinner(DTOutput("n_tabla")))
-    )
-  ),
-
-  # ---- 5. CORRELACIONES ----
-  nav_panel(
-    "Correlaciones", icon = icon("diagram-project"),
-    layout_sidebar(
-      sidebar = sidebar(
-        width = 300,
-        selectizeInput("c_termino", "Término:",
-                       choices = sort(unique(D$correlacion$item1)),
-                       selected = if ("contraloria" %in% D$correlacion$item1) "contraloria"
-                                  else head(sort(unique(D$correlacion$item1)), 1)),
-        sliderInput("c_n", "Cantidad de términos asociados:", min = 5, max = 30, value = 15)
-      ),
-      card(card_header("Términos asociados"),
-           withSpinner(plotlyOutput("c_grafico", height = 420))),
-      card(card_header("Detalle de correlaciones"),
-           withSpinner(DTOutput("c_tabla")))
     )
   ),
 
@@ -520,34 +493,6 @@ server <- function(input, output, session) {
                 language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
   })
 
-  # ===== CORRELACIONES =====
-  corr_termino <- reactive({
-    req(input$c_termino)
-    D$correlacion |>
-      filter(item1 == input$c_termino) |>
-      arrange(desc(correlation)) |>
-      head(input$c_n)
-  })
-
-  output$c_grafico <- renderPlotly({
-    d <- corr_termino()
-    validate(need(nrow(d) > 0, "Sin correlaciones para este término"))
-    d <- d |> mutate(item2 = factor(item2, levels = rev(item2)))
-    plot_ly(d, x = ~correlation, y = ~item2, type = "bar", orientation = "h",
-            marker = list(color = COL_TEAL, line = list(color = COL_NAVY, width = 1)),
-            hovertemplate = "%{y}: %{x:.3f}<extra></extra>") |>
-      estilo_plotly(leyenda = FALSE) |>
-      layout(xaxis = list(title = "Correlación (phi)"), yaxis = list(title = ""))
-  })
-
-  output$c_tabla <- renderDT({
-    d <- corr_termino() |>
-      transmute(termino = item1, asociado = item2, correlacion = round(correlation, 3))
-    datatable(d, rownames = FALSE,
-              colnames = c("Término", "Asociado con", "Correlación"),
-              options = list(pageLength = 10, dom = "tp",
-              language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
-  })
 }
 
 shinyApp(ui, server)

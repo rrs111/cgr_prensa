@@ -47,7 +47,7 @@ cgr_prensa/
 ├── cgr_prensa.Rproj
 ├── instalar_paquetes.R          # instala todos los paquetes
 ├── funciones.R                  # helpers compartidos (red, limpieza, fechas)
-├── cgr_procesar.R               # ORQUESTADOR de procesamiento (p1→p4)
+├── cgr_procesar.R               # ORQUESTADOR de procesamiento (p1→p3)
 ├── scraping/
 │   ├── cgr_scraping.R           # ORQUESTADOR de scraping (todas las fuentes)
 │   ├── cgr_scraping_funciones.R # motor de scraping (polite + rvest + chromote)
@@ -57,9 +57,9 @@ cgr_prensa/
 │   ├── cgr_p1_cargar_datos.R    # cargar + limpiar + dedup + FILTRO CGR
 │   ├── cgr_p2_tokenizar.R       # tokenizar + stopwords + stemming
 │   ├── cgr_p3_contar_palabras.R # frecuencias semana/fuente + TF-IDF
-│   └── cgr_p4_correlacion.R     # correlación entre términos (widyr)
+│   └── cgr_importar_muestra.R   # importar muestra externa (ej. 10.000 de 2025)
 ├── app/
-│   ├── app.R                    # app Shiny (5 pestañas, plotly, paleta CGR)
+│   ├── app.R                    # app Shiny (4 pestañas, plotly, paleta CGR)
 │   └── www/cgr_styles.css       # estética corporativa
 ├── datos/
 │   ├── cgr_terminos.R           # términos de relevancia CGR + stopwords
@@ -167,17 +167,29 @@ cada noticia con las **categorías** que menciona (`institucional`, `funciones`,
    con `{SnowballC}` (agrupa conjugaciones en una sola forma).
 3. **P3 – Contar palabras:** frecuencia por semana y por fuente; TF-IDF por
    fuente.
-4. **P4 – Correlación:** `{widyr}::pairwise_cor()` entre términos por noticia.
 
 Salidas (en `datos/`): `cgr_datos.parquet`, `cgr_palabras_semana.parquet`,
-`cgr_noticias_semana.parquet`, `cgr_tfidf_fuente.parquet`,
-`cgr_correlacion.parquet`, `cgr_metricas.rds`.
+`cgr_noticias_semana.parquet`, `cgr_tfidf_fuente.parquet`, `cgr_metricas.rds`.
+
+### Importar una muestra externa (bootstrap del corpus)
+
+`prensa_chile` publica una [muestra de 10.000 noticias de 2025](https://github.com/bastianolea/prensa_chile/tree/main/datos).
+Se puede filtrar por relevancia CGR e inyectar al corpus de un golpe:
+
+```bash
+# coloca el CSV en datos/ (o pasa la ruta) y luego:
+Rscript procesamiento/cgr_importar_muestra.R datos/prensa_datos_muestra_2025.csv
+Rscript cgr_procesar.R    # recalcula tokens/conteos
+```
+
+> En la práctica, ~1.600 de esas 10.000 noticias resultan relevantes a la CGR.
+> El CSV grande no se versiona; solo entran al corpus las noticias filtradas.
 
 ---
 
 ## App Shiny
 
-5 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
+4 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
 (paleta **Navy `#1B1F49` / Teal `#74CEC4` / Rosa `#F2567A` / Crema `#F4F2E5`**,
 tipografías **DM Sans** + **DM Serif Display**):
 
@@ -187,7 +199,6 @@ tipografías **DM Sans** + **DM Serif Display**):
    fecha, palabras emergentes (últimas 2 semanas vs. anteriores).
 3. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
 4. **Noticias** — buscador con filtros y tabla con enlaces a las noticias.
-5. **Correlaciones** — términos asociados a uno dado.
 
 ```bash
 Rscript -e 'shiny::runApp("app")'
@@ -214,7 +225,7 @@ en `datos/` (los `.rds` crudos del scraping no se versionan).
 ## Paquetes
 
 `tidyverse` · `glue` · `lubridate` · `rvest` · `polite` · `httr2` · `chromote` ·
-`tidytext` · `stopwords` · `SnowballC` · `widyr` · `arrow` · `digest` · `fs` ·
+`tidytext` · `stopwords` · `SnowballC` · `arrow` · `digest` · `fs` ·
 `textclean` · `shiny` · `bslib` · `plotly` · `DT` · `shinyWidgets` ·
 `shinycssloaders` · `future` · `furrr`.
 
