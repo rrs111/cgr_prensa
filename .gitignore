@@ -1,0 +1,30 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Renviron
+.httr-oauth
+
+# Sistema
+.DS_Store
+
+# Datos CRUDOS del scraping: NO se versionan (pesados, regenerables)
+scraping/datos/*
+!scraping/datos/.gitkeep
+
+# Logs del scraping
+scraping/logs/*
+!scraping/logs/.gitkeep
+
+# Base tokenizada a nivel de palabra: pesada y regenerable; la app NO la usa.
+datos/cgr_palabras.parquet
+
+# El resto de datos/ (procesados finales y livianos) SÍ se versiona, para que
+# la app funcione sin reprocesar:
+#   cgr_datos.parquet, cgr_palabras_semana.parquet, cgr_noticias_semana.parquet,
+#   cgr_tfidf_fuente.parquet, cgr_correlacion.parquet, cgr_metricas.rds,
+#   cgr_terminos.R, stopwords_es.txt
+
+# Chromote / Chrome
+chrome-debug.log

@@ -1,0 +1,178 @@
+/* ============================================================
+   CGR Prensa — estética corporativa
+   Paleta:  Navy #1B1F49 | Teal #74CEC4 | Rosa #F2567A | Crema #F4F2E5
+   Tipografía: DM Sans (cuerpo) + DM Serif Display (títulos)
+   ============================================================ */
+
+:root {
+  --cgr-navy:  #1B1F49;
+  --cgr-teal:  #74CEC4;
+  --cgr-rosa:  #F2567A;
+  --cgr-crema: #F4F2E5;
+  --cgr-navy-80: rgba(27, 31, 73, 0.80);
+  --cgr-sombra: 0 2px 12px rgba(27, 31, 73, 0.08);
+}
+
+/* ---------- base ---------- */
+body, .bslib-page-navbar {
+  background-color: var(--cgr-crema) !important;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--cgr-navy);
+}
+
+h1, h2, h3, h4, .cgr-titulo, .navbar-brand {
+  font-family: 'DM Serif Display', Georgia, serif !important;
+  color: var(--cgr-navy);
+  letter-spacing: 0.2px;
+}
+
+a { color: var(--cgr-rosa); }
+a:hover { color: var(--cgr-navy); }
+
+/* ---------- navbar ---------- */
+.navbar, .bslib-page-navbar > .navbar {
+  background-color: var(--cgr-navy) !important;
+  border-bottom: 3px solid var(--cgr-teal);
+  box-shadow: var(--cgr-sombra);
+}
+.navbar .navbar-brand,
+.navbar .nav-link {
+  color: #ffffff !important;
+  font-weight: 500;
+}
+.navbar .navbar-brand {
+  font-size: 1.5rem;
+}
+/* borde inferior teal al pasar el mouse o estar activo */
+.navbar .nav-link {
+  border-bottom: 3px solid transparent;
+  transition: border-color .2s ease, color .2s ease;
+  margin-bottom: -3px;
+}
+.navbar .nav-link:hover {
+  color: var(--cgr-teal) !important;
+  border-bottom: 3px solid var(--cgr-teal);
+}
+.navbar .nav-link.active {
+  color: #ffffff !important;
+  border-bottom: 3px solid var(--cgr-rosa);
+}
+
+/* ---------- paneles / cards ---------- */
+.card, .bslib-card, .well, .panel {
+  background: #ffffff;
+  border: none !important;
+  border-radius: 14px;
+  box-shadow: var(--cgr-sombra);
+}
+.card-header, .bslib-card > .card-header {
+  background: #ffffff;
+  border-bottom: 2px solid var(--cgr-crema);
+  font-family: 'DM Serif Display', serif;
+  color: var(--cgr-navy);
+  font-size: 1.1rem;
+}
+
+/* value boxes / métricas */
+.cgr-metrica {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: var(--cgr-sombra);
+  padding: 18px 20px;
+  border-left: 6px solid var(--cgr-teal);
+}
+.cgr-metrica .valor {
+  font-family: 'DM Serif Display', serif;
+  font-size: 2.2rem;
+  line-height: 1;
+  color: var(--cgr-navy);
+}
+.cgr-metrica .etiqueta {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--cgr-navy-80);
+  margin-top: 6px;
+}
+.cgr-metrica.acento-rosa { border-left-color: var(--cgr-rosa); }
+.cgr-metrica.acento-navy { border-left-color: var(--cgr-navy); }
+
+/* ---------- sidebar ---------- */
+.bslib-sidebar-layout > .sidebar {
+  background: #ffffff !important;
+  border-right: 1px solid rgba(27,31,73,0.06);
+}
+
+/* ---------- inputs ---------- */
+.form-control, .selectize-input, .form-select {
+  border-radius: 10px;
+  border: 1px solid rgba(27, 31, 73, 0.15);
+}
+.form-control:focus, .selectize-input.focus, .form-select:focus {
+  border-color: var(--cgr-teal);
+  box-shadow: 0 0 0 0.2rem rgba(116, 206, 196, 0.35);
+}
+.selectize-dropdown .active { background: var(--cgr-teal) !important; color: var(--cgr-navy) !important; }
+.irs-bar, .irs-handle > i:first-child { background: var(--cgr-teal) !important; }
+.irs-from, .irs-to, .irs-single { background: var(--cgr-navy) !important; }
+
+/* botones */
+.btn-primary, .btn-default.active {
+  background-color: var(--cgr-navy);
+  border-color: var(--cgr-navy);
+  color: #fff;
+  border-radius: 10px;
+}
+.btn-primary:hover { background-color: var(--cgr-teal); border-color: var(--cgr-teal); color: var(--cgr-navy); }
+
+/* ---------- tablas (DT) ---------- */
+table.dataTable thead th {
+  background-color: var(--cgr-navy) !important;
+  color: #ffffff !important;
+  border-bottom: none !important;
+  font-family: 'DM Sans', sans-serif;
+}
+table.dataTable tbody tr:hover { background-color: rgba(116,206,196,0.18) !important; }
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: var(--cgr-teal) !important; color: var(--cgr-navy) !important; border: none; border-radius: 6px;
+}
+.dataTables_filter input:focus { border-color: var(--cgr-teal); }
+
+/* ---------- loading bar animada (teal -> rosa) ---------- */
+#shiny-notification-panel { z-index: 9999; }
+.shiny-progress .progress {
+  height: 6px; background: var(--cgr-crema);
+}
+.shiny-progress .progress .bar,
+.progress-bar {
+  background: linear-gradient(90deg, var(--cgr-teal), var(--cgr-rosa)) !important;
+  background-size: 200% 100% !important;
+  animation: cgr-cargando 1.4s linear infinite;
+}
+@keyframes cgr-cargando {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+/* spinner overlay */
+.load-container .loader { color: var(--cgr-teal) !important; }
+
+/* badge categorías */
+.cgr-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  background: var(--cgr-teal); color: var(--cgr-navy);
+  font-size: 0.72rem; font-weight: 600; margin: 1px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 768px) {
+  .cgr-metrica .valor { font-size: 1.6rem; }
+  .navbar .navbar-brand { font-size: 1.15rem; }
+}
+
+/* nota al pie */
+.cgr-footer {
+  color: var(--cgr-navy-80);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 18px 0 6px;
+}
