@@ -6,6 +6,7 @@
 #   1. Cargar + limpiar + deduplicar + FILTRAR por relevancia CGR
 #   2. Tokenizar (stopwords + stemming)
 #   3. Conteos por semana / fuente + TF-IDF
+#   4. Tono / sentimiento de la cobertura (léxico ES)
 #
 # Uso:  Rscript cgr_procesar.R
 
@@ -20,6 +21,7 @@ notificacion("CGR Prensa", "Iniciando procesamiento…")
 source("procesamiento/cgr_p1_cargar_datos.R")    # -> datos/cgr_datos.parquet
 source("procesamiento/cgr_p2_tokenizar.R")       # -> datos/cgr_palabras.parquet
 source("procesamiento/cgr_p3_contar_palabras.R") # -> conteos + tfidf
+source("procesamiento/cgr_p4_sentimiento.R")     # -> tono por noticia/semana/fuente
 
 tiempo <- round(difftime(now(), inicio, units = "mins"), 2)
 message(glue::glue("\n==== Procesamiento completo en {tiempo} min ===="))

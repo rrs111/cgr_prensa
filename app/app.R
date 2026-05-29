@@ -155,6 +155,27 @@ generar_sinteticos <- function() {
     count(fuente, palabra, wt = n, name = "n") |>
     tidytext::bind_tf_idf(palabra, fuente, n)
 
+  # tono sintético
+  tono_articulo <- datos |>
+    transmute(id, fuente, semana,
+              clase = sample(c("negativo", "neutro", "positivo"), n(), TRUE, c(.2, .5, .3))) |>
+    mutate(score = case_match(clase,
+              "negativo" ~ runif(n(), -.6, -.2),
+              "positivo" ~ runif(n(), .2, .6),
+              .default = runif(n(), -.15, .15)),
+           n_lex = sample(3:20, n(), TRUE))
+  tono_semana <- tono_articulo |> group_by(semana) |>
+    summarise(n_noticias = n(), score_prom = round(mean(score), 3),
+              pct_neg = round(mean(clase == "negativo"), 3),
+              pct_neu = round(mean(clase == "neutro"), 3),
+              pct_pos = round(mean(clase == "positivo"), 3), .groups = "drop") |>
+    mutate(indice_presion = round(n_noticias * pct_neg)) |> arrange(semana)
+  tono_fuente <- tono_articulo |> group_by(fuente) |>
+    summarise(n = n(), score_prom = round(mean(score), 3),
+              pct_neg = round(mean(clase == "negativo"), 3),
+              pct_pos = round(mean(clase == "positivo"), 3), .groups = "drop") |>
+    arrange(score_prom)
+
   metricas <- list(
     total = nrow(datos),
     semana_actual = sum(datos$semana == max(semanas)),
@@ -165,6 +186,7 @@ generar_sinteticos <- function() {
 
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
+       tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
        metricas = metricas, sintetico = TRUE)
 }
 
@@ -187,8 +209,18 @@ cargar_todo <- function() {
     fuentes_activas = n_distinct(datos$fuente),
     ultima_fecha = max(datos$fecha, na.rm = TRUE), actualizado = now())
 
+  tono_semana <- cargar_archivo("cgr_tono_semana.parquet")
+  tono_fuente <- cargar_archivo("cgr_tono_fuente.parquet")
+  tono_articulo <- cargar_archivo("cgr_tono_articulo.parquet")
+  if (is.null(tono_articulo)) tono_articulo <- tibble(id = datos$id, score = 0, n_lex = 0L, clase = "neutro")
+  if (is.null(tono_semana)) tono_semana <- tibble(semana = as.Date(character()), n_noticias = integer(),
+       score_prom = numeric(), pct_neg = numeric(), pct_neu = numeric(), pct_pos = numeric(), indice_presion = integer())
+  if (is.null(tono_fuente)) tono_fuente <- tibble(fuente = character(), n = integer(),
+       score_prom = numeric(), pct_neg = numeric(), pct_pos = numeric())
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
+       tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
        metricas = metricas, sintetico = FALSE)
 }
 
@@ -247,7 +279,33 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- 2. TENDENCIAS ----
+  # ---- 2. TONO ----
+  nav_panel(
+    "Tono", icon = icon("face-meh"),
+    div(class = "container-fluid",
+      uiOutput("tono_metricas_ui"),
+      layout_columns(
+        col_widths = c(7, 5),
+        card(card_header("Evolución del tono de la cobertura"),
+             withSpinner(plotlyOutput("t_tono_semana", height = 320))),
+        card(card_header("Índice de presión mediática (noticias negativas/semana)"),
+             withSpinner(plotlyOutput("t_presion", height = 320)))
+      ),
+      layout_columns(
+        col_widths = c(6, 6),
+        card(card_header("Tono por medio (de más crítico a más favorable)"),
+             withSpinner(plotlyOutput("t_tono_fuente", height = 420))),
+        card(card_header("Composición del tono por semana"),
+             withSpinner(plotlyOutput("t_composicion", height = 420)))
+      ),
+      div(class = "cgr-footer", style = "text-align:left;",
+          "Nota: mide el tono del lenguaje de la cobertura (léxico de polaridad en ",
+          "español), no el sentimiento explícito hacia la CGR. Una noticia donde la ",
+          "CGR detecta corrupción tiende a tono negativo por el hecho que reporta.")
+    )
+  ),
+
+  # ---- 3. TENDENCIAS ----
   nav_panel(
     "Tendencias", icon = icon("arrow-trend-up"),
     layout_sidebar(
@@ -384,6 +442,86 @@ server <- function(input, output, session) {
     nube_plotly(d, n_palabras = 70)
   })
 
+  # ===== TONO =====
+  output$tono_metricas_ui <- renderUI({
+    ta <- D$tono_articulo
+    if (is.null(ta) || nrow(ta) == 0) {
+      return(div(class = "cgr-footer", "Sin datos de tono — corre `Rscript cgr_procesar.R`."))
+    }
+    pct_neg <- mean(ta$clase == "negativo")
+    pct_pos <- mean(ta$clase == "positivo")
+    score <- mean(ta$score)
+    etiqueta <- if (score <= -0.1) "Tono crítico" else if (score >= 0.1) "Tono favorable" else "Tono neutral"
+    ult <- if (nrow(D$tono_semana) > 0) tail(D$tono_semana$indice_presion, 1) else 0
+    fmt <- function(x) paste0(formatC(100 * x, digits = 1, format = "f"), "%")
+    layout_columns(
+      col_widths = c(3, 3, 3, 3),
+      metrica_box(etiqueta, paste0("Score promedio ", round(score, 2)), "navy"),
+      metrica_box(fmt(pct_neg), "% noticias negativas", "rosa"),
+      metrica_box(fmt(pct_pos), "% noticias positivas", "teal"),
+      metrica_box(formatC(as.integer(ult), big.mark = ".", format = "d"),
+                  "Presión última semana", "rosa")
+    )
+  })
+
+  output$t_tono_semana <- renderPlotly({
+    d <- D$tono_semana |> arrange(semana)
+    validate(need(nrow(d) > 0, "Sin datos de tono semanal"))
+    plot_ly(d, x = ~semana, y = ~score_prom, type = "scatter", mode = "lines+markers",
+            line = list(color = COL_NAVY, width = 2.5),
+            marker = list(size = 5, color = COL_NAVY),
+            hovertemplate = "%{x|%d %b %Y}<br>Score: %{y:.2f}<extra></extra>") |>
+      add_lines(y = 0, line = list(color = "rgba(27,31,73,0.25)", dash = "dot"),
+                showlegend = FALSE, hoverinfo = "skip") |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = ""),
+             yaxis = list(title = "Score de tono (-1 crítico · +1 favorable)",
+                          range = c(-0.6, 0.6)))
+  })
+
+  output$t_presion <- renderPlotly({
+    d <- D$tono_semana |> arrange(semana)
+    validate(need(nrow(d) > 0, "Sin datos"))
+    plot_ly(d, x = ~semana, y = ~indice_presion, type = "bar",
+            marker = list(color = COL_ROSA),
+            hovertemplate = "%{x|%d %b %Y}<br>%{y} noticias negativas<extra></extra>") |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = ""), yaxis = list(title = "Noticias negativas"))
+  })
+
+  output$t_tono_fuente <- renderPlotly({
+    d <- D$tono_fuente |> filter(n >= 5) |> arrange(score_prom)
+    validate(need(nrow(d) > 0, "Sin datos por fuente"))
+    d <- d |> mutate(fuente = factor(fuente, levels = fuente),
+                     color = ifelse(score_prom < 0, COL_ROSA, COL_TEAL))
+    plot_ly(d, x = ~score_prom, y = ~fuente, type = "bar", orientation = "h",
+            marker = list(color = ~color, line = list(color = COL_NAVY, width = 0.5)),
+            text = ~paste0("n=", n), textposition = "outside",
+            hovertemplate = "%{y}<br>Score: %{x:.2f}<br>%{text}<extra></extra>") |>
+      add_lines(x = 0, y = ~fuente, line = list(color = "rgba(27,31,73,0.3)", dash = "dot"),
+                showlegend = FALSE, hoverinfo = "skip", inherit = FALSE) |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = "Score promedio"), yaxis = list(title = ""))
+  })
+
+  output$t_composicion <- renderPlotly({
+    d <- D$tono_semana |> arrange(semana)
+    validate(need(nrow(d) > 0, "Sin datos"))
+    plot_ly(d, x = ~semana) |>
+      add_trace(y = ~pct_neg, name = "Negativo", type = "scatter", mode = "none",
+                stackgroup = "uno", fillcolor = COL_ROSA,
+                hovertemplate = "Negativo: %{y:.0%}<extra></extra>") |>
+      add_trace(y = ~pct_neu, name = "Neutro", type = "scatter", mode = "none",
+                stackgroup = "uno", fillcolor = "rgba(27,31,73,0.55)",
+                hovertemplate = "Neutro: %{y:.0%}<extra></extra>") |>
+      add_trace(y = ~pct_pos, name = "Positivo", type = "scatter", mode = "none",
+                stackgroup = "uno", fillcolor = COL_TEAL,
+                hovertemplate = "Positivo: %{y:.0%}<extra></extra>") |>
+      estilo_plotly() |>
+      layout(xaxis = list(title = ""),
+             yaxis = list(title = "Composición", tickformat = ".0%", range = c(0, 1)))
+  })
+
   # ===== TENDENCIAS =====
   output$g_tendencia <- renderPlotly({
     req(input$t_terminos)
@@ -481,14 +619,20 @@ server <- function(input, output, session) {
 
   output$n_tabla <- renderDT({
     d <- noticias_filtradas() |>
+      left_join(select(D$tono_articulo, id, clase), by = "id") |>
+      mutate(clase = tidyr::replace_na(clase, "neutro")) |>
       transmute(
         fecha = format(fecha, "%Y-%m-%d"),
         fuente = fuente,
-        titulo = paste0("<a href='", url, "' target='_blank'>", htmltools::htmlEscape(titulo), "</a>"),
+        titulo = ifelse(is.na(url) | url == "" | startsWith(url, "muestra2025"),
+                        htmltools::htmlEscape(titulo),
+                        paste0("<a href='", url, "' target='_blank'>",
+                               htmltools::htmlEscape(titulo), "</a>")),
+        tono = paste0("<span class='cgr-badge tono-", clase, "'>", clase, "</span>"),
         categorias = ifelse(is.na(categorias), "", categorias)
       )
     datatable(d, rownames = FALSE, escape = FALSE,
-              colnames = c("Fecha", "Fuente", "Título", "Categorías"),
+              colnames = c("Fecha", "Fuente", "Título", "Tono", "Categorías"),
               options = list(pageLength = 15, order = list(list(0, "desc")),
                 language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
   })

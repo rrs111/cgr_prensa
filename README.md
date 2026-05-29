@@ -57,9 +57,10 @@ cgr_prensa/
 │   ├── cgr_p1_cargar_datos.R    # cargar + limpiar + dedup + FILTRO CGR
 │   ├── cgr_p2_tokenizar.R       # tokenizar + stopwords + stemming
 │   ├── cgr_p3_contar_palabras.R # frecuencias semana/fuente + TF-IDF
+│   ├── cgr_p4_sentimiento.R     # tono de la cobertura (léxico ES) + presión
 │   └── cgr_importar_muestra.R   # importar muestra externa (ej. 10.000 de 2025)
 ├── app/
-│   ├── app.R                    # app Shiny (4 pestañas, plotly, paleta CGR)
+│   ├── app.R                    # app Shiny (5 pestañas, plotly, paleta CGR)
 │   └── www/cgr_styles.css       # estética corporativa
 ├── datos/
 │   ├── cgr_terminos.R           # términos de relevancia CGR + stopwords
@@ -167,9 +168,19 @@ cada noticia con las **categorías** que menciona (`institucional`, `funciones`,
    con `{SnowballC}` (agrupa conjugaciones en una sola forma).
 3. **P3 – Contar palabras:** frecuencia por semana y por fuente; TF-IDF por
    fuente.
+4. **P4 – Tono / sentimiento:** clasifica cada noticia (negativa/neutra/
+   positiva) usando un **léxico de polaridad en español** versionado
+   (`datos/cgr_lexico_sentimiento.csv`, derivado del NRC-es de `syuzhet`
+   ampliado con términos del dominio CGR). Calcula tono por semana, por medio,
+   e **índice de presión mediática** (volumen × negatividad).
+   *Mide el tono del lenguaje de la cobertura, no el sentimiento explícito
+   hacia la CGR (una nota donde la CGR destapa corrupción es de tono negativo
+   por el hecho que reporta).*
 
 Salidas (en `datos/`): `cgr_datos.parquet`, `cgr_palabras_semana.parquet`,
-`cgr_noticias_semana.parquet`, `cgr_tfidf_fuente.parquet`, `cgr_metricas.rds`.
+`cgr_noticias_semana.parquet`, `cgr_tfidf_fuente.parquet`,
+`cgr_tono_articulo.parquet`, `cgr_tono_semana.parquet`,
+`cgr_tono_fuente.parquet`, `cgr_metricas.rds`.
 
 ### Importar una muestra externa (bootstrap del corpus)
 
@@ -189,16 +200,21 @@ Rscript cgr_procesar.R    # recalcula tokens/conteos
 
 ## App Shiny
 
-4 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
+5 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
 (paleta **Navy `#1B1F49` / Teal `#74CEC4` / Rosa `#F2567A` / Crema `#F4F2E5`**,
 tipografías **DM Sans** + **DM Serif Display**):
 
 1. **Resumen** — métricas, noticias por semana, distribución por fuente, top
    palabras, nube de palabras.
-2. **Tendencias** — evolución temporal de hasta 5 términos, filtros por fuente y
+2. **Tono** — métricas de tono (score, % negativas/positivas, presión última
+   semana); evolución del tono por semana; índice de presión mediática;
+   ranking de medios de más crítico a más favorable; composición del tono
+   por semana (área apilada).
+3. **Tendencias** — evolución temporal de hasta 5 términos, filtros por fuente y
    fecha, palabras emergentes (últimas 2 semanas vs. anteriores).
-3. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
-4. **Noticias** — buscador con filtros y tabla con enlaces a las noticias.
+4. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
+5. **Noticias** — buscador con filtros y tabla con enlaces a las noticias
+   (incluye badge de tono por noticia).
 
 ```bash
 Rscript -e 'shiny::runApp("app")'

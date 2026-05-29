@@ -156,12 +156,16 @@ table.dataTable tbody tr:hover { background-color: rgba(116,206,196,0.18) !impor
 /* spinner overlay */
 .load-container .loader { color: var(--cgr-teal) !important; }
 
-/* badge categorías */
+/* badge categorías + badges de tono */
 .cgr-badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px;
   background: var(--cgr-teal); color: var(--cgr-navy);
   font-size: 0.72rem; font-weight: 600; margin: 1px;
+  text-transform: capitalize;
 }
+.cgr-badge.tono-negativo { background: var(--cgr-rosa); color: #fff; }
+.cgr-badge.tono-positivo { background: var(--cgr-teal); color: var(--cgr-navy); }
+.cgr-badge.tono-neutro   { background: rgba(27,31,73,0.12); color: var(--cgr-navy); }
 
 /* ---------- responsive ---------- */
 @media (max-width: 768px) {

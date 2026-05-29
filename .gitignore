@@ -23,6 +23,7 @@ datos/cgr_palabras.parquet
 # Muestra externa de noticias (CSV grande, p. ej. la de 10.000 de prensa_chile):
 # no se versiona; solo las noticias CGR filtradas que entran a cgr_datos.parquet.
 datos/*.csv
+!datos/cgr_lexico_sentimiento.csv   # léxico de sentimiento sí se versiona
 
 # El resto de datos/ (procesados finales y livianos) SÍ se versiona, para que
 # la app funcione sin reprocesar:
