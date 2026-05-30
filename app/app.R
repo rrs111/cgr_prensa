@@ -184,9 +184,47 @@ generar_sinteticos <- function() {
     actualizado = now()
   )
 
+  # temas sintéticos: 7 etiquetas plausibles del dominio + gamma Dirichlet por doc
+  set.seed(2027)
+  K_syn <- 7L
+  etiq_syn <- c(
+    "corrupcion · municipio · fondos",
+    "auditoria · contrato · licitacion",
+    "dictamen · decreto · toma de razon",
+    "sumario · funcionarios · responsabilidad",
+    "transparencia · probidad · declaracion",
+    "alcalde · gobierno regional · gore",
+    "presupuesto · gasto · ministerio"
+  )
+  etiquetas_df <- tibble::tibble(tema = 1:K_syn, etiqueta = etiq_syn)
+
+  # Dirichlet por documento: rgamma con shape pequeño da distribuciones picudas
+  gamma_mat <- matrix(rgamma(nrow(datos) * K_syn, shape = 0.5), nrow = nrow(datos))
+  gamma_mat <- gamma_mat / rowSums(gamma_mat)
+  colnames(gamma_mat) <- paste0("T", 1:K_syn)
+  temas_doc <- bind_cols(datos |> select(id, fuente, semana, fecha),
+                         as.data.frame(gamma_mat)) |>
+    tidyr::pivot_longer(starts_with("T"), names_to = "tema_str", values_to = "gamma") |>
+    mutate(tema = as.integer(sub("T", "", tema_str))) |>
+    select(-tema_str) |>
+    left_join(etiquetas_df, by = "tema")
+
+  # top términos por tema = muestrear del vocab
+  temas_terminos <- map_dfr(1:K_syn, function(k) {
+    pal <- sample(vocab, 10)
+    tibble(tema = k, etiqueta = etiq_syn[k], palabra = pal,
+           beta = sort(runif(10, 0.01, 0.08), decreasing = TRUE))
+  })
+
+  temas_semana <- temas_doc |>
+    group_by(semana, tema, etiqueta) |>
+    summarise(prevalencia = mean(gamma), n_doc = n_distinct(id), .groups = "drop") |>
+    arrange(semana, tema)
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
+       temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
        metricas = metricas, sintetico = TRUE)
 }
 
@@ -218,9 +256,21 @@ cargar_todo <- function() {
   if (is.null(tono_fuente)) tono_fuente <- tibble(fuente = character(), n = integer(),
        score_prom = numeric(), pct_neg = numeric(), pct_pos = numeric())
 
+  temas_terminos <- cargar_archivo("cgr_temas_terminos.parquet")
+  temas_doc      <- cargar_archivo("cgr_temas_doc.parquet")
+  temas_semana   <- cargar_archivo("cgr_temas_semana.parquet")
+  if (is.null(temas_terminos)) temas_terminos <- tibble(tema = integer(), etiqueta = character(),
+       palabra = character(), beta = numeric())
+  if (is.null(temas_doc))      temas_doc <- tibble(id = character(), fuente = character(),
+       semana = as.Date(character()), fecha = as.Date(character()),
+       tema = integer(), etiqueta = character(), gamma = numeric())
+  if (is.null(temas_semana))   temas_semana <- tibble(semana = as.Date(character()),
+       tema = integer(), etiqueta = character(), prevalencia = numeric(), n_doc = integer())
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
+       temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
        metricas = metricas, sintetico = FALSE)
 }
 
@@ -305,7 +355,33 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- 3. TENDENCIAS ----
+  # ---- 3. TEMAS ----
+  nav_panel(
+    "Temas", icon = icon("layer-group"),
+    layout_sidebar(
+      sidebar = sidebar(
+        width = 320,
+        selectInput("temas_seleccion", "Tema a inspeccionar:",
+                    choices = NULL, selected = NULL)
+      ),
+      uiOutput("temas_metricas_ui"),
+      layout_columns(
+        col_widths = c(5, 7),
+        card(card_header("Top términos del tema seleccionado"),
+             withSpinner(plotlyOutput("temas_terminos_plot", height = 380))),
+        card(card_header("Prevalencia de los temas a lo largo del tiempo"),
+             withSpinner(plotlyOutput("temas_evolucion", height = 380)))
+      ),
+      card(card_header("Artículos más representativos del tema seleccionado"),
+           withSpinner(DTOutput("temas_docs_tabla"))),
+      div(class = "cgr-footer", style = "text-align:left;",
+          "Modelado con {stm} (K = 8 temas). La etiqueta de cada tema es ",
+          "provisional (top 3 términos por β); se puede sustituir por una ",
+          "descripción legible en la Fase 3 (LLM).")
+    )
+  ),
+
+  # ---- 4. TENDENCIAS ----
   nav_panel(
     "Tendencias", icon = icon("arrow-trend-up"),
     layout_sidebar(
@@ -520,6 +596,95 @@ server <- function(input, output, session) {
       estilo_plotly() |>
       layout(xaxis = list(title = ""),
              yaxis = list(title = "Composición", tickformat = ".0%", range = c(0, 1)))
+  })
+
+  # ===== TEMAS =====
+  # Etiquetas (mapa tema -> etiqueta) y choices del selector
+  temas_choices <- reactive({
+    if (nrow(D$temas_terminos) == 0) return(setNames(integer(), character()))
+    et <- D$temas_terminos |> distinct(tema, etiqueta) |> arrange(tema)
+    setNames(et$tema, paste0("T", et$tema, " — ", et$etiqueta))
+  })
+
+  observe({
+    ch <- temas_choices()
+    updateSelectInput(session, "temas_seleccion", choices = ch,
+                      selected = if (length(ch)) ch[1] else character(0))
+  })
+
+  output$temas_metricas_ui <- renderUI({
+    if (nrow(D$temas_semana) == 0) {
+      return(div(class = "cgr-footer", "Sin datos de temas — corre `Rscript cgr_procesar.R`."))
+    }
+    n_temas <- n_distinct(D$temas_terminos$tema)
+    ult <- max(D$temas_semana$semana, na.rm = TRUE)
+    dom_ult <- D$temas_semana |> filter(semana == ult) |> slice_max(prevalencia, n = 1)
+    cobertura <- if (nrow(dom_ult)) round(100 * dom_ult$prevalencia[1], 0) else 0
+    layout_columns(
+      col_widths = c(3, 6, 3),
+      metrica_box(n_temas, "Temas detectados", "navy"),
+      metrica_box(if (nrow(dom_ult)) dom_ult$etiqueta[1] else "—",
+                  "Tema dominante última semana", "teal"),
+      metrica_box(paste0(cobertura, "%"),
+                  "Prevalencia del dominante", "rosa")
+    )
+  })
+
+  output$temas_terminos_plot <- renderPlotly({
+    req(input$temas_seleccion)
+    tema_sel <- as.integer(input$temas_seleccion)
+    d <- D$temas_terminos |> filter(tema == tema_sel) |>
+      arrange(desc(beta)) |> head(12) |>
+      mutate(palabra = factor(palabra, levels = rev(palabra)))
+    validate(need(nrow(d) > 0, "Sin términos para este tema"))
+    plot_ly(d, x = ~beta, y = ~palabra, type = "bar", orientation = "h",
+            marker = list(color = COL_NAVY),
+            hovertemplate = "%{y}: β=%{x:.3f}<extra></extra>") |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = "β (probabilidad en el tema)"),
+             yaxis = list(title = ""))
+  })
+
+  output$temas_evolucion <- renderPlotly({
+    d <- D$temas_semana |> arrange(semana, tema)
+    validate(need(nrow(d) > 0, "Sin datos de prevalencia"))
+    # paleta extendida para hasta ~10 temas
+    pal <- rep(PALETA_CGR, length.out = max(d$tema, na.rm = TRUE))
+    d_split <- split(d, d$tema)
+    p <- plot_ly()
+    for (k in seq_along(d_split)) {
+      dk <- d_split[[k]]
+      lbl <- paste0("T", dk$tema[1], " — ", dk$etiqueta[1])
+      p <- p |> add_trace(x = dk$semana, y = dk$prevalencia, name = lbl,
+                          type = "scatter", mode = "none",
+                          stackgroup = "uno", fillcolor = pal[dk$tema[1]],
+                          hovertemplate = paste0(lbl, "<br>%{x|%d %b %Y}: %{y:.0%}<extra></extra>"))
+    }
+    p |> estilo_plotly() |>
+      layout(xaxis = list(title = ""),
+             yaxis = list(title = "Prevalencia", tickformat = ".0%", range = c(0, 1)))
+  })
+
+  output$temas_docs_tabla <- renderDT({
+    req(input$temas_seleccion)
+    tema_sel <- as.integer(input$temas_seleccion)
+    top_docs <- D$temas_doc |> filter(tema == tema_sel) |>
+      arrange(desc(gamma)) |> head(50) |> select(id, gamma)
+    d <- top_docs |>
+      inner_join(D$datos |> select(id, fecha, fuente, titulo, url), by = "id") |>
+      transmute(
+        fecha = format(fecha, "%Y-%m-%d"),
+        fuente = fuente,
+        titulo = ifelse(is.na(url) | url == "" | startsWith(url, "muestra2025"),
+                        htmltools::htmlEscape(titulo),
+                        paste0("<a href='", url, "' target='_blank'>",
+                               htmltools::htmlEscape(titulo), "</a>")),
+        peso = sprintf("%.0f%%", 100 * gamma)
+      )
+    datatable(d, rownames = FALSE, escape = FALSE,
+              colnames = c("Fecha", "Fuente", "Título", "Peso en el tema"),
+              options = list(pageLength = 12, order = list(list(3, "desc")),
+                language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
   })
 
   # ===== TENDENCIAS =====

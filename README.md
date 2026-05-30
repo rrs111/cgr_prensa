@@ -58,9 +58,10 @@ cgr_prensa/
 │   ├── cgr_p2_tokenizar.R       # tokenizar + stopwords + stemming
 │   ├── cgr_p3_contar_palabras.R # frecuencias semana/fuente + TF-IDF
 │   ├── cgr_p4_sentimiento.R     # tono de la cobertura (léxico ES) + presión
+│   ├── cgr_p5_temas.R           # modelado de temas (stm, K=8)
 │   └── cgr_importar_muestra.R   # importar muestra externa (ej. 10.000 de 2025)
 ├── app/
-│   ├── app.R                    # app Shiny (5 pestañas, plotly, paleta CGR)
+│   ├── app.R                    # app Shiny (6 pestañas, plotly, paleta CGR)
 │   └── www/cgr_styles.css       # estética corporativa
 ├── datos/
 │   ├── cgr_terminos.R           # términos de relevancia CGR + stopwords
@@ -200,7 +201,7 @@ Rscript cgr_procesar.R    # recalcula tokens/conteos
 
 ## App Shiny
 
-5 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
+6 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
 (paleta **Navy `#1B1F49` / Teal `#74CEC4` / Rosa `#F2567A` / Crema `#F4F2E5`**,
 tipografías **DM Sans** + **DM Serif Display**):
 
@@ -210,10 +211,13 @@ tipografías **DM Sans** + **DM Serif Display**):
    semana); evolución del tono por semana; índice de presión mediática;
    ranking de medios de más crítico a más favorable; composición del tono
    por semana (área apilada).
-3. **Tendencias** — evolución temporal de hasta 5 términos, filtros por fuente y
+3. **Temas** — modelado de tópicos (`{stm}`, K=8): selector de tema, top
+   términos por β, prevalencia de los temas a lo largo del tiempo (área
+   apilada) y artículos más representativos de cada tema.
+4. **Tendencias** — evolución temporal de hasta 5 términos, filtros por fuente y
    fecha, palabras emergentes (últimas 2 semanas vs. anteriores).
-4. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
-5. **Noticias** — buscador con filtros y tabla con enlaces a las noticias
+5. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
+6. **Noticias** — buscador con filtros y tabla con enlaces a las noticias
    (incluye badge de tono por noticia).
 
 ```bash
