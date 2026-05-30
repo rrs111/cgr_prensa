@@ -221,10 +221,45 @@ generar_sinteticos <- function() {
     summarise(prevalencia = mean(gamma), n_doc = n_distinct(id), .groups = "drop") |>
     arrange(semana, tema)
 
+  # entidades sintéticas: actores plausibles del dominio CGR
+  ent_plantilla <- list(
+    persona = c("Dorothy Pérez", "Gabriel Boric", "José Antonio Kast",
+                "Mario Desbordes", "Carolina Tohá", "Evelyn Matthei",
+                "Pamela Jiles", "Daniel Jadue", "Karol Cariola"),
+    organizacion = c("Ministerio de Hacienda", "Ministerio del Interior",
+                     "Corte Suprema", "Servicio de Impuestos Internos",
+                     "Carabineros", "Fiscalía Nacional", "Banco Central",
+                     "Cámara de Diputados", "Senado"),
+    lugar = c("Santiago", "Valparaíso", "Concepción", "Antofagasta",
+              "Las Condes", "Maipú", "Metropolitana", "Biobío"),
+    cargo = c("ministro", "alcalde", "gobernador", "diputado",
+              "presidente", "fiscal", "senador", "director")
+  )
+  ent_filas <- map2_dfr(names(ent_plantilla), ent_plantilla, function(tp, lst) {
+    map_dfr(lst, function(e) {
+      ids <- sample(datos$id, sample(3:25, 1))
+      tibble(id = ids, entidad = e, tipo = tp)
+    })
+  })
+  entidades <- ent_filas
+  entidades_resumen <- entidades |>
+    left_join(datos |> select(id, fuente), by = "id") |>
+    group_by(entidad, tipo) |>
+    summarise(n_menciones = n_distinct(id),
+              n_fuentes = n_distinct(fuente), .groups = "drop") |>
+    arrange(desc(n_menciones))
+  entidades_semana <- entidades |>
+    left_join(datos |> select(id, semana), by = "id") |>
+    group_by(semana, entidad, tipo) |>
+    summarise(n = n_distinct(id), .groups = "drop") |>
+    arrange(semana, desc(n))
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
        temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
+       entidades = entidades, entidades_resumen = entidades_resumen,
+       entidades_semana = entidades_semana,
        metricas = metricas, sintetico = TRUE)
 }
 
@@ -267,10 +302,21 @@ cargar_todo <- function() {
   if (is.null(temas_semana))   temas_semana <- tibble(semana = as.Date(character()),
        tema = integer(), etiqueta = character(), prevalencia = numeric(), n_doc = integer())
 
+  entidades         <- cargar_archivo("cgr_entidades.parquet")
+  entidades_resumen <- cargar_archivo("cgr_entidades_resumen.parquet")
+  entidades_semana  <- cargar_archivo("cgr_entidades_semana.parquet")
+  if (is.null(entidades))         entidades <- tibble(id = character(), entidad = character(), tipo = character())
+  if (is.null(entidades_resumen)) entidades_resumen <- tibble(entidad = character(),
+       tipo = character(), n_menciones = integer(), n_fuentes = integer())
+  if (is.null(entidades_semana))  entidades_semana <- tibble(semana = as.Date(character()),
+       entidad = character(), tipo = character(), n = integer())
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
        temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
+       entidades = entidades, entidades_resumen = entidades_resumen,
+       entidades_semana = entidades_semana,
        metricas = metricas, sintetico = FALSE)
 }
 
@@ -381,7 +427,41 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- 4. TENDENCIAS ----
+  # ---- 4. ACTORES ----
+  nav_panel(
+    "Actores", icon = icon("users"),
+    layout_sidebar(
+      sidebar = sidebar(
+        width = 280,
+        pickerInput("act_tipos", "Tipo de actor:",
+                    choices = c("persona", "organizacion", "lugar", "cargo"),
+                    selected = c("persona", "organizacion"),
+                    multiple = TRUE,
+                    options = list(`actions-box` = TRUE,
+                                   `selected-text-format` = "count > 2")),
+        sliderInput("act_top_n", "Cuántos mostrar:", min = 10, max = 50, value = 20, step = 5),
+        textInput("act_buscar", "Buscar actor:", placeholder = "ej: Boric, ministerio")
+      ),
+      uiOutput("act_metricas_ui"),
+      layout_columns(
+        col_widths = c(7, 5),
+        card(card_header("Actores más mencionados"),
+             withSpinner(plotlyOutput("act_top", height = 460))),
+        card(card_header("Evolución temporal de los top 5 actores"),
+             withSpinner(plotlyOutput("act_evolucion", height = 460)))
+      ),
+      card(card_header("Detalle de actores"),
+           withSpinner(DTOutput("act_tabla"))),
+      div(class = "cgr-footer", style = "text-align:left;",
+          "NER vía {udpipe} (modelo spanish-gsd) sobre título + bajada. ",
+          "Personas, organizaciones, lugares y cargos. Los nombres de los ",
+          "medios y la propia CGR se excluyen del listado por ser sujetos, ",
+          "no actores de la noticia. La precisión es razonable sin LLM; ",
+          "puede haber alguna mala clasificación (p. ej. apellidos sueltos).")
+    )
+  ),
+
+  # ---- 5. TENDENCIAS ----
   nav_panel(
     "Tendencias", icon = icon("arrow-trend-up"),
     layout_sidebar(
@@ -684,6 +764,78 @@ server <- function(input, output, session) {
     datatable(d, rownames = FALSE, escape = FALSE,
               colnames = c("Fecha", "Fuente", "Título", "Peso en el tema"),
               options = list(pageLength = 12, order = list(list(3, "desc")),
+                language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
+  })
+
+  # ===== ACTORES =====
+  ent_filtradas <- reactive({
+    d <- D$entidades_resumen |> filter(tipo %in% input$act_tipos)
+    if (nzchar(input$act_buscar)) {
+      d <- d |> filter(str_detect(str_to_lower(entidad),
+                                  str_to_lower(input$act_buscar)))
+    }
+    d |> arrange(desc(n_menciones))
+  })
+
+  output$act_metricas_ui <- renderUI({
+    d <- D$entidades_resumen
+    if (nrow(d) == 0) {
+      return(div(class = "cgr-footer", "Sin datos de actores — corre `Rscript cgr_procesar.R`."))
+    }
+    n_total <- sum(d$n_menciones)
+    n_pers  <- sum(d$tipo == "persona")
+    n_org   <- sum(d$tipo == "organizacion")
+    n_lug   <- sum(d$tipo == "lugar")
+    layout_columns(
+      col_widths = c(3, 3, 3, 3),
+      metrica_box(formatC(nrow(d), big.mark = ".", format = "d"),
+                  "Actores únicos", "navy"),
+      metrica_box(formatC(n_pers, big.mark = ".", format = "d"),
+                  "Personas", "rosa"),
+      metrica_box(formatC(n_org, big.mark = ".", format = "d"),
+                  "Organizaciones", "teal"),
+      metrica_box(formatC(n_lug, big.mark = ".", format = "d"),
+                  "Lugares", "teal")
+    )
+  })
+
+  output$act_top <- renderPlotly({
+    d <- ent_filtradas() |> head(input$act_top_n)
+    validate(need(nrow(d) > 0, "Sin actores para los filtros seleccionados"))
+    color_tipo <- c(persona = COL_NAVY, organizacion = COL_TEAL,
+                    lugar = COL_ROSA, cargo = "#3E6E8C")
+    d <- d |> mutate(color = color_tipo[tipo],
+                     entidad = factor(entidad, levels = rev(entidad)))
+    plot_ly(d, x = ~n_menciones, y = ~entidad, type = "bar", orientation = "h",
+            color = ~tipo, colors = color_tipo,
+            hovertemplate = "%{y}<br>%{x} menciones<br>%{customdata} fuentes<extra>%{fullData.name}</extra>",
+            customdata = ~n_fuentes) |>
+      estilo_plotly() |>
+      layout(xaxis = list(title = "Menciones"),
+             yaxis = list(title = ""),
+             legend = list(orientation = "h", y = 1.05))
+  })
+
+  output$act_evolucion <- renderPlotly({
+    top5 <- ent_filtradas() |> head(5) |> pull(entidad)
+    validate(need(length(top5) > 0, "Sin datos para evolución"))
+    d <- D$entidades_semana |> filter(entidad %in% top5) |>
+      complete(semana = unique(D$entidades_semana$semana), entidad = top5, fill = list(n = 0)) |>
+      arrange(semana)
+    plot_ly(d, x = ~semana, y = ~n, color = ~entidad, colors = PALETA_CGR,
+            type = "scatter", mode = "lines",
+            line = list(width = 2),
+            hovertemplate = "%{x|%d %b %Y}<br>%{y} menciones<extra>%{fullData.name}</extra>") |>
+      estilo_plotly() |>
+      layout(xaxis = list(title = ""), yaxis = list(title = "Menciones"))
+  })
+
+  output$act_tabla <- renderDT({
+    d <- ent_filtradas() |>
+      transmute(entidad, tipo, n_menciones, n_fuentes)
+    datatable(d, rownames = FALSE,
+              colnames = c("Actor", "Tipo", "Menciones", "Fuentes que cubren"),
+              options = list(pageLength = 15,
                 language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
   })
 
