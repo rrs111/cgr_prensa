@@ -38,7 +38,7 @@ jobs:
           restore-keys: ${{ runner.os }}-r-cgr-
 
       - name: Dependencias del sistema
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev libglpk-dev
 
       - name: Instalar paquetes R
         run: >
