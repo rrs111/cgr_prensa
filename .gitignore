@@ -35,3 +35,4 @@ chrome-debug.log
 
 # Modelos NLP pesados (se descargan en el primer run del pipeline)
 datos/modelos/
+.positai

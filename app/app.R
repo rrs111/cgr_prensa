@@ -254,12 +254,31 @@ generar_sinteticos <- function() {
     summarise(n = n_distinct(id), .groups = "drop") |>
     arrange(semana, desc(n))
 
+  # red de co-ocurrencia sintética: 30 palabras en círculo + aristas aleatorias
+  red_palabras <- sample(vocab, min(30, length(vocab)))
+  ang <- seq(0, 2 * pi, length.out = length(red_palabras) + 1)[-1]
+  red_nodos <- tibble(
+    palabra = red_palabras,
+    x = cos(ang) + rnorm(length(ang), sd = 0.08),
+    y = sin(ang) + rnorm(length(ang), sd = 0.08),
+    peso = sample(50:300, length(red_palabras), replace = TRUE)
+  )
+  combos <- expand.grid(palabra_a = red_palabras, palabra_b = red_palabras,
+                        stringsAsFactors = FALSE) |>
+    filter(palabra_a < palabra_b)
+  red_aristas <- combos |>
+    sample_n(60) |>
+    mutate(peso = sample(5:50, 60, replace = TRUE)) |>
+    left_join(red_nodos |> select(palabra, x0 = x, y0 = y), by = c("palabra_a" = "palabra")) |>
+    left_join(red_nodos |> select(palabra, x1 = x, y1 = y), by = c("palabra_b" = "palabra"))
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
        temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
+       red_nodos = red_nodos, red_aristas = red_aristas,
        metricas = metricas, sintetico = TRUE)
 }
 
@@ -311,12 +330,21 @@ cargar_todo <- function() {
   if (is.null(entidades_semana))  entidades_semana <- tibble(semana = as.Date(character()),
        entidad = character(), tipo = character(), n = integer())
 
+  red_nodos   <- cargar_archivo("cgr_red_nodos.parquet")
+  red_aristas <- cargar_archivo("cgr_red_aristas.parquet")
+  if (is.null(red_nodos))   red_nodos   <- tibble(palabra = character(), x = numeric(),
+                                                  y = numeric(), peso = numeric())
+  if (is.null(red_aristas)) red_aristas <- tibble(palabra_a = character(), palabra_b = character(),
+                                                  peso = numeric(), x0 = numeric(), y0 = numeric(),
+                                                  x1 = numeric(), y1 = numeric())
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
        temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
+       red_nodos = red_nodos, red_aristas = red_aristas,
        metricas = metricas, sintetico = FALSE)
 }
 
@@ -481,11 +509,17 @@ ui <- page_navbar(
       card(card_header("Evolución temporal de términos"),
            withSpinner(plotlyOutput("g_tendencia", height = 380))),
       card(card_header("Palabras emergentes (últimas 2 semanas vs. anteriores)"),
-           withSpinner(plotlyOutput("g_emergentes", height = 320)))
+           withSpinner(plotlyOutput("g_emergentes", height = 320))),
+      card(card_header("Red de co-ocurrencia (qué palabras aparecen juntas)"),
+           withSpinner(plotlyOutput("g_red", height = 520)),
+           div(class = "cgr-footer", style = "text-align:left;",
+               "Top 50 términos por fuerza de co-ocurrencia (ventana de 5 ",
+               "palabras). Layout Fruchterman-Reingold. Tamaño del nodo y grosor ",
+               "de la arista proporcionales al peso."))
     )
   ),
 
-  # ---- 3. FUENTES ----
+  # ---- 6. FUENTES ----
   nav_panel(
     "Fuentes", icon = icon("newspaper"),
     layout_sidebar(
@@ -507,7 +541,7 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- 4. NOTICIAS ----
+  # ---- 7. NOTICIAS ----
   nav_panel(
     "Noticias", icon = icon("magnifying-glass"),
     layout_sidebar(
@@ -519,10 +553,18 @@ ui <- page_navbar(
                     options = list(`actions-box` = TRUE, `selected-text-format` = "count > 2")),
         sliderInput("n_fechas", "Rango de fechas:",
                     min = rango_fechas[1], max = rango_fechas[2],
-                    value = rango_fechas, timeFormat = "%d %b %Y")
+                    value = rango_fechas, timeFormat = "%d %b %Y"),
+        hr(),
+        textInput("kwic_termino", "Palabra en contexto (KWIC):",
+                  placeholder = "ej: contraloria, licencia, sumario")
       ),
       card(card_header(textOutput("n_titulo_tabla")),
-           withSpinner(DTOutput("n_tabla")))
+           withSpinner(DTOutput("n_tabla"))),
+      card(card_header("Palabra en contexto (KWIC)"),
+           withSpinner(DTOutput("kwic_tabla")),
+           div(class = "cgr-footer", style = "text-align:left;",
+               "Frases reales del cuerpo de las noticias donde aparece el ",
+               "término. Útil para entender el sentido y el tono del uso."))
     )
   ),
 
@@ -879,6 +921,41 @@ server <- function(input, output, session) {
       layout(xaxis = list(title = "Cambio en menciones"), yaxis = list(title = ""))
   })
 
+  # ----- Red de co-ocurrencia (Tendencias) -----
+  output$g_red <- renderPlotly({
+    nodos <- D$red_nodos
+    aristas <- D$red_aristas
+    validate(need(nrow(nodos) > 0 && nrow(aristas) > 0,
+                  "Sin datos de red — corre `Rscript cgr_procesar.R`"))
+    # aristas como líneas con NA entre cada par (técnica estándar plotly)
+    ex <- as.vector(rbind(aristas$x0, aristas$x1, NA))
+    ey <- as.vector(rbind(aristas$y0, aristas$y1, NA))
+    # tamaño nodos escalado y label
+    s_max <- max(nodos$peso, na.rm = TRUE)
+    nodos <- nodos |> mutate(size = 10 + 35 * peso / s_max)
+    plot_ly() |>
+      add_trace(x = ex, y = ey, type = "scatter", mode = "lines",
+                line = list(color = "rgba(27,31,73,0.18)", width = 1.2),
+                hoverinfo = "skip", showlegend = FALSE) |>
+      add_trace(x = nodos$x, y = nodos$y, type = "scatter", mode = "markers+text",
+                marker = list(size = nodos$size, color = COL_TEAL,
+                              line = list(color = COL_NAVY, width = 1.5),
+                              opacity = 0.85),
+                text = nodos$palabra, textposition = "top center",
+                textfont = list(family = "DM Sans, sans-serif",
+                                size = 12, color = COL_NAVY),
+                hovertemplate = paste0("<b>%{text}</b><br>peso: ",
+                                       round(nodos$peso, 0), "<extra></extra>"),
+                showlegend = FALSE) |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(
+        xaxis = list(title = "", showgrid = FALSE, zeroline = FALSE,
+                     showticklabels = FALSE),
+        yaxis = list(title = "", showgrid = FALSE, zeroline = FALSE,
+                     showticklabels = FALSE)
+      )
+  })
+
   # ===== FUENTES =====
   output$f_conteo <- renderPlotly({
     req(input$f_fuentes)
@@ -951,6 +1028,56 @@ server <- function(input, output, session) {
     datatable(d, rownames = FALSE, escape = FALSE,
               colnames = c("Fecha", "Fuente", "Título", "Tono", "Categorías"),
               options = list(pageLength = 15, order = list(list(0, "desc")),
+                language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
+  })
+
+  # ----- KWIC: palabra en contexto (insensible a tildes y mayúsculas) -----
+  output$kwic_tabla <- renderDT({
+    term <- str_trim(input$kwic_termino %||% "")
+    validate(need(nchar(term) >= 2, "Escribe al menos 2 caracteres en la barra lateral."))
+
+    term_norm <- stringi::stri_trans_general(tolower(term), "Latin-ASCII")
+    term_esc  <- str_replace_all(term_norm,
+                  "([\\.\\+\\*\\?\\(\\)\\[\\]\\{\\}\\^\\$\\|\\\\])", "\\\\\\1")
+    re_match  <- regex(paste0("\\b", term_esc, "\\b"), ignore_case = FALSE)
+    re_capt   <- regex(paste0("(.{0,80})\\b(", term_esc, ")\\b(.{0,80})"),
+                       ignore_case = FALSE, dotall = TRUE)
+
+    base <- noticias_filtradas() |>
+      mutate(
+        texto_orig = paste(titulo, replace_na(bajada, ""), replace_na(cuerpo, "")),
+        texto_norm = stringi::stri_trans_general(tolower(texto_orig), "Latin-ASCII")
+      ) |>
+      filter(str_detect(texto_norm, re_match))
+
+    validate(need(nrow(base) > 0, "Sin ocurrencias del término en las noticias filtradas."))
+
+    base <- base |> head(80)
+    # Latin-ASCII de español es char-a-char, así que las posiciones del match
+    # en el texto normalizado se pueden usar sobre el texto original.
+    pos <- str_locate(base$texto_norm, re_match)
+    extra <- str_match(base$texto_norm, re_capt)
+    izq_len <- nchar(extra[, 2]);  der_len <- nchar(extra[, 4])
+    izq <- substr(base$texto_orig, pmax(1, pos[, 1] - izq_len), pos[, 1] - 1)
+    mid <- substr(base$texto_orig, pos[, 1], pos[, 2])
+    der <- substr(base$texto_orig, pos[, 2] + 1, pos[, 2] + der_len)
+
+    contexto <- paste0(
+      "…", htmltools::htmlEscape(izq),
+      "<strong style='background:rgba(116,206,196,0.45);padding:0 3px;border-radius:3px;color:#1B1F49;'>",
+      htmltools::htmlEscape(mid), "</strong>",
+      htmltools::htmlEscape(der), "…"
+    )
+
+    d <- tibble(
+      fecha   = format(base$fecha, "%Y-%m-%d"),
+      fuente  = base$fuente,
+      contexto = contexto
+    )
+    datatable(d, rownames = FALSE, escape = FALSE,
+              colnames = c("Fecha", "Fuente", "Contexto"),
+              options = list(pageLength = 10, dom = "tp",
+                columnDefs = list(list(width = "65%", targets = 2)),
                 language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
   })
 

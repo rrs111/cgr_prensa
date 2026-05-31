@@ -60,6 +60,7 @@ cgr_prensa/
 │   ├── cgr_p4_sentimiento.R     # tono de la cobertura (léxico ES) + presión
 │   ├── cgr_p5_temas.R           # modelado de temas (stm, K=8)
 │   ├── cgr_p6_actores.R         # entidades / NER (udpipe español)
+│   ├── cgr_p7_red.R             # red de co-ocurrencia (quanteda + igraph)
 │   └── cgr_importar_muestra.R   # importar muestra externa (ej. 10.000 de 2025)
 ├── app/
 │   ├── app.R                    # app Shiny (7 pestañas, plotly, paleta CGR)
@@ -218,11 +219,13 @@ tipografías **DM Sans** + **DM Serif Display**):
 4. **Actores** — entidades nombradas (NER con `{udpipe}`): métricas por tipo
    (personas, organizaciones, lugares, cargos), ranking de actores más
    mencionados con filtros, evolución de los top 5 y tabla con cobertura.
-5. **Tendencias** — evolución temporal de hasta 5 términos, filtros por fuente y
-   fecha, palabras emergentes (últimas 2 semanas vs. anteriores).
+5. **Tendencias** — evolución temporal de hasta 5 términos, palabras emergentes
+   (últimas 2 semanas vs. anteriores) y **red de co-ocurrencia** (qué
+   términos aparecen juntos, layout Fruchterman-Reingold con `{igraph}`).
 6. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
-7. **Noticias** — buscador con filtros y tabla con enlaces a las noticias
-   (incluye badge de tono por noticia).
+7. **Noticias** — buscador con filtros y tabla con enlaces (badge de tono por
+   noticia) + **KWIC** (palabra en contexto): frases reales donde aparece un
+   término, con resaltado e insensible a tildes.
 
 ```bash
 Rscript -e 'shiny::runApp("app")'

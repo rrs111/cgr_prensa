@@ -24,6 +24,7 @@ source("procesamiento/cgr_p3_contar_palabras.R") # -> conteos + tfidf
 source("procesamiento/cgr_p4_sentimiento.R")     # -> tono por noticia/semana/fuente
 source("procesamiento/cgr_p5_temas.R")           # -> temas latentes (stm)
 source("procesamiento/cgr_p6_actores.R")         # -> entidades (NER con udpipe)
+source("procesamiento/cgr_p7_red.R")             # -> co-ocurrencia + red precomputada
 
 tiempo <- round(difftime(now(), inicio, units = "mins"), 2)
 message(glue::glue("\n==== Procesamiento completo en {tiempo} min ===="))
