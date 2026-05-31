@@ -44,7 +44,8 @@ jobs:
         run: >
           Rscript -e 'pkgs <- c("dplyr","stringr","purrr","tidyr","readr","glue",
           "lubridate","stringi","digest","rvest","polite","httr2","chromote",
-          "tidytext","stopwords","SnowballC","widyr","arrow","fs","textclean");
+          "tidytext","stopwords","SnowballC","arrow","fs","textclean",
+          "stm","tm","udpipe","quanteda","igraph");
           faltan <- setdiff(pkgs, rownames(installed.packages()));
           if (length(faltan)) install.packages(faltan)'
 
