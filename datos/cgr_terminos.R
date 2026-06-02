@@ -65,18 +65,47 @@ normalizar_texto <- function(x) {
     tolower()
 }
 
-# "cgr" se exige como palabra completa (evita falsos positivos dentro de otras palabras).
-# El resto de los términos se buscan con límites de palabra.
+# —--------------------------------------------------------------------------
+# NÚCLEO INSTITUCIONAL: una noticia es relevante SOLO si menciona explícitamente
+# a la Contraloría o a una de sus funciones inequívocas. Los términos temáticos
+# amplios (corrupción, probidad, transparencia, etc.) NO bastan por sí solos
+# para incluir una noticia — solo aportan contexto/etiqueta una vez que ya
+# entró por el núcleo. Esto evita falsos positivos (columnas de opinión, notas
+# de "salud pública", etc. que no hablan de la CGR).
+#
+# Se usan prefijos (sin \\b final) para cubrir todas las flexiones:
+#   "contralor"  -> contraloría, contralor, contralora, contralores, contralorías
+#   "dictam"     -> dictamen, dictámenes, dictaminó
+# —--------------------------------------------------------------------------
+nucleo_cgr <- c(
+  "contralor",                       # contraloría/contralor/contralora/regional/general
+  "dorothy perez",
+  "toma de razon",
+  "dictam",                          # dictamen / dictámenes / dictaminó
+  "sumario administrativo",
+  "juicio de cuentas",
+  "responsabilidad administrativa"
+)
+
+# regex del núcleo: "cgr" como palabra completa; prefijos sin límite final;
+# multipalabra con espacios flexibles.
+.nucleo_sin_cgr <- nucleo_cgr
+nucleo_cgr_regex <- paste0(
+  "\\bcgr\\b|",
+  paste0("\\b", str_replace_all(.nucleo_sin_cgr, " ", "\\\\s+"), collapse = "|")
+)
+
+# (se conserva el regex amplio por compatibilidad / usos futuros)
 .terminos_sin_cgr <- setdiff(terminos_cgr_todos, "cgr")
 terminos_cgr_regex <- paste0(
   "\\bcgr\\b|",
   paste0("\\b", str_replace_all(.terminos_sin_cgr, " ", "\\\\s+"), "\\b", collapse = "|")
 )
 
-# Devuelve TRUE si el texto (título + bajada + cuerpo) menciona algún término CGR
+# Devuelve TRUE si el texto menciona explícitamente a la CGR (núcleo institucional).
 es_relevante_cgr <- function(texto) {
   texto_norm <- normalizar_texto(texto)
-  str_detect(texto_norm, terminos_cgr_regex)
+  str_detect(texto_norm, nucleo_cgr_regex)
 }
 
 # Devuelve, para cada texto, qué categorías CGR menciona (string separado por ;)
