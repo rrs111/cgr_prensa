@@ -82,6 +82,15 @@ datos <- datos |>
 
 message(glue::glue("Noticias relacionadas con la CGR: {nrow(datos)} de {n_antes}"))
 
+# 5b. CORTE TEMPORAL: solo cobertura desde 2025 ---------------------------------
+# El monitoreo se enfoca en la cobertura reciente; se descartan noticias
+# anteriores a esta fecha (configurable con CGR_FECHA_MIN).
+fecha_min <- suppressWarnings(as_date(Sys.getenv("CGR_FECHA_MIN", "2025-01-01")))
+if (is.na(fecha_min)) fecha_min <- as_date("2025-01-01")
+n_pre <- sum(datos$fecha < fecha_min, na.rm = TRUE)
+datos <- datos |> filter(!is.na(fecha), fecha >= fecha_min)
+message(glue::glue("Corte temporal (>= {fecha_min}): se descartaron {n_pre}; quedan {nrow(datos)}"))
+
 # 6. Limpieza profunda de texto + id --------------------------------------------
 datos_prensa <- datos |>
   mutate(
