@@ -188,13 +188,13 @@ generar_sinteticos <- function() {
   set.seed(2027)
   K_syn <- 7L
   etiq_syn <- c(
-    "corrupcion · municipio · fondos",
-    "auditoria · contrato · licitacion",
-    "dictamen · decreto · toma de razon",
-    "sumario · funcionarios · responsabilidad",
-    "transparencia · probidad · declaracion",
-    "alcalde · gobierno regional · gore",
-    "presupuesto · gasto · ministerio"
+    "corrupcion / municipio / fondos",
+    "auditoria / contrato / licitacion",
+    "dictamen / decreto / toma de razon",
+    "sumario / funcionarios / responsabilidad",
+    "transparencia / probidad / declaracion",
+    "alcalde / gobierno regional / gore",
+    "presupuesto / gasto / ministerio"
   )
   etiquetas_df <- tibble::tibble(tema = 1:K_syn, etiqueta = etiq_syn)
 

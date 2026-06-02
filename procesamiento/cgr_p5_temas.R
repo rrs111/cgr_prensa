@@ -105,7 +105,8 @@ etiquetas <- terminos |>
   group_by(tema) |>
   arrange(desc(beta)) |>
   slice_head(n = 3) |>
-  summarise(etiqueta = paste(palabra, collapse = " · "), .groups = "drop")
+  # separador ASCII ( / ): evita que un "·" no-ASCII se rompa bajo locale C
+  summarise(etiqueta = paste(palabra, collapse = " / "), .groups = "drop")
 
 terminos <- terminos |> left_join(etiquetas, by = "tema") |>
   select(tema, etiqueta, palabra, beta)
