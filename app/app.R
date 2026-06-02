@@ -87,17 +87,47 @@ metrica_box <- function(valor, etiqueta, acento = c("teal", "rosa", "navy")) {
 # ---------------------------------------------------------------------------
 # Carga de datos (real o sintético)
 # ---------------------------------------------------------------------------
+# Base URL del repo público (raw). La app desplegada (shinyapps.io) lee los
+# datos directo de GitHub, así refleja siempre lo último que pusheó el bot
+# diario sin necesidad de re-desplegar. En local se usan los archivos del disco.
+CGR_DATA_URL <- Sys.getenv(
+  "CGR_DATA_URL",
+  "https://raw.githubusercontent.com/rrs111/cgr_prensa/main/datos"
+)
+
+# Lee un parquet/rds desde una ruta local o una URL (descarga a tempfile)
+.leer_dato <- function(ruta, nombre) {
+  es_url <- grepl("^https?://", ruta)
+  if (es_url) {
+    tmp <- tempfile(fileext = paste0(".", tools::file_ext(nombre)))
+    ok <- tryCatch(
+      utils::download.file(ruta, tmp, quiet = TRUE, mode = "wb") == 0,
+      error = function(e) FALSE
+    )
+    if (!ok) return(NULL)
+    ruta <- tmp
+    on.exit(unlink(tmp), add = TRUE)
+  }
+  if (grepl("\\.parquet$", nombre)) {
+    tryCatch(arrow::read_parquet(ruta), error = function(e) NULL)
+  } else {
+    tryCatch(readRDS(ruta), error = function(e) NULL)
+  }
+}
+
 cargar_archivo <- function(nombre) {
+  # 1) buscar local (desarrollo / ejecución desde el repo)
   cands <- c(file.path("datos", nombre),
              file.path("..", "datos", nombre),
              file.path("app", "datos", nombre))
   hit <- cands[file.exists(cands)]
-  if (length(hit) == 0) return(NULL)
-  if (grepl("\\.parquet$", nombre)) {
-    tryCatch(arrow::read_parquet(hit[1]), error = function(e) NULL)
-  } else {
-    tryCatch(readRDS(hit[1]), error = function(e) NULL)
+  if (length(hit) > 0) return(.leer_dato(hit[1], nombre))
+
+  # 2) si no hay local (app desplegada), leer del repo público en GitHub
+  if (nzchar(CGR_DATA_URL)) {
+    return(.leer_dato(paste0(CGR_DATA_URL, "/", nombre), nombre))
   }
+  NULL
 }
 
 # --- generador de datos sintéticos coherentes -------------------------------
@@ -151,9 +181,14 @@ generar_sinteticos <- function() {
 
   noticias_semana <- datos |> count(semana, fuente, name = "n_noticias")
 
+  # TF-IDF calculado a mano (evita depender de {tidytext} en el bundle de deploy)
   tfidf_fuente <- palabras_semana |>
     count(fuente, palabra, wt = n, name = "n") |>
-    tidytext::bind_tf_idf(palabra, fuente, n)
+    group_by(fuente) |> mutate(tf = n / sum(n)) |> ungroup() |>
+    add_count(palabra, name = "docs_term") |>
+    mutate(idf = log(n_distinct(fuente) / docs_term),
+           tf_idf = tf * idf) |>
+    select(fuente, palabra, n, tf, idf, tf_idf)
 
   # tono sintético
   tono_articulo <- datos |>
