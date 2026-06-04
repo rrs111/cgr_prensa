@@ -14,6 +14,8 @@ jobs:
     env:
       CGR_MODO: completo      # búsqueda CGR + secciones (corpus más amplio)
       CGR_MAX: "100"
+      CGR_PAUSA_MIN: "0.5"    # pausa mínima entre requests (s)
+      CGR_PAUSA_MAX: "1.2"    # pausa máxima
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:

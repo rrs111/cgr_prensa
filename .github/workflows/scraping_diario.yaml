@@ -14,6 +14,8 @@ jobs:
     env:
       CGR_MODO: completo      # búsqueda de términos CGR + secciones recientes
       CGR_MAX: "40"           # tope de noticias por fuente (acota el tiempo de CI)
+      CGR_PAUSA_MIN: "0.5"    # pausa mínima entre requests (s) — acelera el run
+      CGR_PAUSA_MAX: "1.2"    # pausa máxima (sigue siendo cortés con los servidores)
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
