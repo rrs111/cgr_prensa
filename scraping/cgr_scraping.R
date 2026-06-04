@@ -30,16 +30,25 @@ source("funciones.R")
 modulos_rvest <- c("emol", "biobio", "cooperativa", "cnnchile", "elmostrador",
                    "eldinamo", "ciper", "pauta", "t13", "interferencia",
                    "ellibero", "eldesconcierto")
-modulos_paywall <- c("lasegunda", "df")
-modulos_js <- c("latercera", "exante", "theclinic")
+modulos_paywall <- c("lasegunda")
+modulos_js <- c("latercera", "theclinic")
+
+# Fuentes DESHABILITADAS por dar 0 noticias de forma garantizada:
+#   - df     : paywall de Diario Financiero (no se obtiene cuerpo ni titular útil)
+#   - exante : bloqueado por Cloudflare incluso con Chrome headless
+# Sus módulos siguen existiendo (cgr_obtener_df.R / _exante.R) y pueden correrse
+# a mano con CGR_FUENTES="df,exante" si algún día cambian de plataforma.
+modulos_deshabilitados <- c("df", "exante")
 
 modulos <- c(modulos_rvest, modulos_paywall, modulos_js)
 
-# Permitir limitar a algunas fuentes vía variable de entorno
+# Permitir limitar a algunas fuentes vía variable de entorno.
+# Si se piden explícitamente, se permite incluso reactivar las deshabilitadas
+# (ej. CGR_FUENTES="df,exante" para una prueba puntual).
 sel <- Sys.getenv("CGR_FUENTES", "")
 if (nzchar(sel)) {
   pedidas <- trimws(strsplit(sel, ",")[[1]])
-  modulos <- modulos[modulos %in% pedidas]
+  modulos <- intersect(pedidas, c(modulos, modulos_deshabilitados))
 }
 
 # Ejecución --------------------------------------------------------------------
