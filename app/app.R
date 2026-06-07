@@ -52,27 +52,62 @@ estilo_plotly <- function(p, leyenda = TRUE) {
 
 # Nube de palabras hecha con plotly (sin dependencia de wordcloud2).
 # Distribuye las palabras en una espiral, con tamaño proporcional a la frecuencia.
-nube_plotly <- function(d, n_palabras = 70) {
+# Nube de palabras hecha con plotly (sin wordcloud2). Coloca cada palabra en una
+# espiral buscando la primera posición SIN colisión con las ya puestas (como las
+# nubes de verdad), estimando el "cuadro" de cada palabra por su largo y tamaño.
+nube_plotly <- function(d, n_palabras = 45) {
   d <- d |> arrange(desc(freq)) |> head(n_palabras)
   k <- nrow(d)
   if (k == 0) return(plotly_empty())
-  i <- seq_len(k)
-  ang <- i * 2.399963          # ángulo áureo -> distribución pareja
-  rad <- sqrt(i)
+
   fmin <- min(d$freq); fmax <- max(d$freq)
-  size <- if (fmax > fmin) 13 + 34 * (sqrt(d$freq) - sqrt(fmin)) / (sqrt(fmax) - sqrt(fmin)) else rep(22, k)
+  size <- if (fmax > fmin) {
+    12 + 30 * (sqrt(d$freq) - sqrt(fmin)) / (sqrt(fmax) - sqrt(fmin))
+  } else rep(20, k)
+
+  # cuadro delimitador aproximado de cada palabra, en "unidades" = px de fuente
+  w <- nchar(d$palabra) * size * 0.60   # ancho ≈ nº letras × tamaño
+  h <- size * 1.25                       # alto ≈ tamaño (con interlínea)
+
+  px <- numeric(k); py <- numeric(k)
+  cx0 <- numeric(0); cy0 <- numeric(0); cw <- numeric(0); ch <- numeric(0)
+
+  for (i in seq_len(k)) {
+    t <- 0
+    repeat {
+      r   <- 0.8 * t                     # radio crece despacio = nube compacta
+      ang <- t * 0.45                    # paso angular
+      cx  <- r * cos(ang); cy <- r * sin(ang)
+      # colisión por cuadros (AABB) contra todas las ya colocadas
+      libre <- TRUE
+      if (length(cx0) > 0) {
+        solapa <- (abs(cx - cx0) * 2 < (w[i] + cw)) & (abs(cy - cy0) * 2 < (h[i] + ch))
+        if (any(solapa)) libre <- FALSE
+      }
+      if (libre || t > 4000) {
+        px[i] <- cx; py[i] <- cy
+        cx0 <- c(cx0, cx); cy0 <- c(cy0, cy); cw <- c(cw, w[i]); ch <- c(ch, h[i])
+        break
+      }
+      t <- t + 1
+    }
+  }
+
+  # rango de ejes ajustado a la extensión real (mantiene proporción px↔coords)
+  ext_x <- max(abs(px) + w / 2) * 1.05
+  ext_y <- max(abs(py) + h / 2) * 1.05
   col <- rep(PALETA_CGR, length.out = k)
+
   plot_ly(
-    x = rad * cos(ang), y = rad * sin(ang),
-    type = "scatter", mode = "text",
+    x = px, y = py, type = "scatter", mode = "text",
     text = d$palabra, textfont = list(size = size, color = col, family = "DM Sans, sans-serif"),
     hovertext = paste0(d$palabra, ": ", d$freq), hoverinfo = "text"
   ) |>
     layout(
       paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)",
-      xaxis = list(visible = FALSE, range = c(-max(rad) - 1, max(rad) + 1)),
-      yaxis = list(visible = FALSE, range = c(-max(rad) - 1, max(rad) + 1)),
-      margin = list(t = 10, r = 10, b = 10, l = 10), showlegend = FALSE
+      xaxis = list(visible = FALSE, range = c(-ext_x, ext_x)),
+      yaxis = list(visible = FALSE, range = c(-ext_y, ext_y)),
+      margin = list(t = 6, r = 6, b = 6, l = 6), showlegend = FALSE
     ) |>
     config(displayModeBar = FALSE)
 }
@@ -307,9 +342,26 @@ generar_sinteticos <- function() {
     left_join(red_nodos |> select(palabra, x0 = x, y0 = y), by = c("palabra_a" = "palabra")) |>
     left_join(red_nodos |> select(palabra, x1 = x, y1 = y), by = c("palabra_b" = "palabra"))
 
+  # postura LLM sintética: distribución distinta a la del tono léxico, para que
+  # en demo se note que son métricas diferentes (más desfavorables)
+  postura_articulo <- datos |>
+    transmute(id, postura = sample(c("desfavorable", "neutra", "favorable"),
+                                   n(), TRUE, c(.35, .4, .25)))
+  pa_syn <- postura_articulo |> left_join(datos |> select(id, fuente, semana), by = "id")
+  postura_semana <- pa_syn |> group_by(semana) |>
+    summarise(n = n(), pct_desfavorable = round(mean(postura == "desfavorable"), 3),
+              pct_neutra = round(mean(postura == "neutra"), 3),
+              pct_favorable = round(mean(postura == "favorable"), 3), .groups = "drop") |>
+    arrange(semana)
+  postura_fuente <- pa_syn |> group_by(fuente) |>
+    summarise(n = n(), pct_desfavorable = round(mean(postura == "desfavorable"), 3),
+              pct_favorable = round(mean(postura == "favorable"), 3), .groups = "drop") |>
+    arrange(desc(pct_desfavorable))
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
+       postura_articulo = postura_articulo, postura_semana = postura_semana, postura_fuente = postura_fuente,
        temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
@@ -373,9 +425,20 @@ cargar_todo <- function() {
                                                   peso = numeric(), x0 = numeric(), y0 = numeric(),
                                                   x1 = numeric(), y1 = numeric())
 
+  # Postura hacia la CGR (LLM) — métrica opcional generada localmente
+  postura_articulo <- cargar_archivo("cgr_postura_articulo.parquet")
+  postura_semana   <- cargar_archivo("cgr_postura_semana.parquet")
+  postura_fuente   <- cargar_archivo("cgr_postura_fuente.parquet")
+  if (is.null(postura_articulo)) postura_articulo <- tibble(id = character(), postura = character())
+  if (is.null(postura_semana))   postura_semana <- tibble(semana = as.Date(character()), n = integer(),
+       pct_desfavorable = numeric(), pct_neutra = numeric(), pct_favorable = numeric())
+  if (is.null(postura_fuente))   postura_fuente <- tibble(fuente = character(), n = integer(),
+       pct_desfavorable = numeric(), pct_favorable = numeric())
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana, tfidf_fuente = tfidf_fuente,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
+       postura_articulo = postura_articulo, postura_semana = postura_semana, postura_fuente = postura_fuente,
        temas_terminos = temas_terminos, temas_doc = temas_doc, temas_semana = temas_semana,
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
@@ -460,7 +523,27 @@ ui <- page_navbar(
       div(class = "cgr-footer", style = "text-align:left;",
           "Nota: mide el tono del lenguaje de la cobertura (léxico de polaridad en ",
           "español), no el sentimiento explícito hacia la CGR. Una noticia donde la ",
-          "CGR detecta corrupción tiende a tono negativo por el hecho que reporta.")
+          "CGR detecta corrupción tiende a tono negativo por el hecho que reporta."),
+
+      # --- Postura hacia la CGR (LLM) ---
+      tags$hr(),
+      tags$h4("Postura hacia la CGR (análisis con IA)", class = "cgr-titulo",
+              style = "margin-top:10px;"),
+      uiOutput("postura_metricas_ui"),
+      layout_columns(
+        col_widths = c(7, 5),
+        card(card_header("Composición de la postura por semana"),
+             withSpinner(plotlyOutput("p_composicion", height = 320))),
+        card(card_header("Postura por medio (% desfavorable a la CGR)"),
+             withSpinner(plotlyOutput("p_fuente", height = 320)))
+      ),
+      div(class = "cgr-footer", style = "text-align:left;",
+          "A diferencia del tono por léxico, esta métrica usa un modelo de lenguaje ",
+          "(Llama local, vía Ollama) que LEE cada noticia y juzga si deja a la ",
+          "Contraloría favorable / neutra / desfavorable, entendiendo el contexto ",
+          "(p. ej. una nota sobre cuestionamientos a la contralora es desfavorable, ",
+          "aunque su lenguaje sea formal). Se genera localmente con ",
+          tags$code("Rscript procesamiento/cgr_sentimiento_llm.R"), ".")
     )
   ),
 
@@ -753,6 +836,65 @@ server <- function(input, output, session) {
       estilo_plotly() |>
       layout(xaxis = list(title = ""),
              yaxis = list(title = "Composición", tickformat = ".0%", range = c(0, 1)))
+  })
+
+  # ----- Postura hacia la CGR (LLM) -----
+  hay_postura <- reactive({
+    nrow(D$postura_articulo) > 0 && any(!is.na(D$postura_articulo$postura))
+  })
+
+  output$postura_metricas_ui <- renderUI({
+    if (!hay_postura()) {
+      return(div(class = "cgr-footer", style = "text-align:left;",
+                 "Aún no hay análisis de postura. Generalo localmente con ",
+                 tags$code("Rscript procesamiento/cgr_sentimiento_llm.R"),
+                 " (requiere Ollama)."))
+    }
+    pa <- D$postura_articulo
+    pct <- function(c) paste0(round(100 * mean(pa$postura == c)), "%")
+    fmt_ult <- if (nrow(D$postura_semana) > 0) {
+      paste0(round(100 * tail(D$postura_semana$pct_desfavorable, 1)), "%")
+    } else "—"
+    layout_columns(
+      col_widths = c(3, 3, 3, 3),
+      metrica_box(pct("desfavorable"), "Desfavorable a la CGR", "rosa"),
+      metrica_box(pct("neutra"), "Neutra", "navy"),
+      metrica_box(pct("favorable"), "Favorable", "teal"),
+      metrica_box(fmt_ult, "Desfavorable última semana", "rosa")
+    )
+  })
+
+  output$p_composicion <- renderPlotly({
+    validate(need(hay_postura() && nrow(D$postura_semana) > 0,
+                  "Sin datos de postura — corré el script LLM local."))
+    d <- D$postura_semana |> arrange(semana)
+    plot_ly(d, x = ~semana) |>
+      add_trace(y = ~pct_desfavorable, name = "Desfavorable", type = "scatter", mode = "none",
+                stackgroup = "uno", fillcolor = COL_ROSA,
+                hovertemplate = "Desfavorable: %{y:.0%}<extra></extra>") |>
+      add_trace(y = ~pct_neutra, name = "Neutra", type = "scatter", mode = "none",
+                stackgroup = "uno", fillcolor = "rgba(27,31,73,0.55)",
+                hovertemplate = "Neutra: %{y:.0%}<extra></extra>") |>
+      add_trace(y = ~pct_favorable, name = "Favorable", type = "scatter", mode = "none",
+                stackgroup = "uno", fillcolor = COL_TEAL,
+                hovertemplate = "Favorable: %{y:.0%}<extra></extra>") |>
+      estilo_plotly() |>
+      layout(xaxis = list(title = ""),
+             yaxis = list(title = "Composición", tickformat = ".0%", range = c(0, 1)))
+  })
+
+  output$p_fuente <- renderPlotly({
+    validate(need(hay_postura() && nrow(D$postura_fuente) > 0,
+                  "Sin datos de postura por fuente."))
+    d <- D$postura_fuente |> filter(n >= 3) |> arrange(pct_desfavorable) |>
+      mutate(fuente = factor(fuente, levels = fuente))
+    plot_ly(d, x = ~pct_desfavorable, y = ~fuente, type = "bar", orientation = "h",
+            marker = list(color = COL_ROSA, line = list(color = COL_NAVY, width = 0.5)),
+            text = ~paste0("n=", n), textposition = "outside",
+            hovertemplate = "%{y}<br>%{x:.0%} desfavorable<br>%{text}<extra></extra>") |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = "% noticias desfavorables", tickformat = ".0%"),
+             yaxis = list(title = ""))
   })
 
   # ===== TEMAS =====
