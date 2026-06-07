@@ -68,7 +68,7 @@ armar_prompt <- function(texto) {
 # --- Backend: Gemini --------------------------------------------------------
 GEMINI_KEY    <- Sys.getenv("GEMINI_API_KEY", "")
 GEMINI_MODELO <- Sys.getenv("CGR_LLM_MODELO", "gemini-flash-latest")
-GEMINI_PAUSA  <- as.numeric(Sys.getenv("CGR_GEMINI_PAUSA", "1.2"))  # respeta rate limit
+GEMINI_PAUSA  <- as.numeric(Sys.getenv("CGR_GEMINI_PAUSA", "6"))  # respeta rate limit del free tier
 
 clasificar_gemini <- function(texto) {
   url <- paste0("https://generativelanguage.googleapis.com/v1beta/models/",
@@ -148,12 +148,21 @@ if (nrow(pendientes) > 0) {
     mutate(texto = str_squish(paste(titulo, coalesce(bajada, ""),
                                     substr(coalesce(cuerpo, ""), 1, 1800))))
   posturas <- character(nrow(textos))
+  fallos <- 0L
   for (i in seq_len(nrow(textos))) {
     posturas[i] <- clasificar(textos$texto[i])
+    if (is.na(posturas[i])) fallos <- fallos + 1L
     if (pausa > 0) Sys.sleep(pausa)
-    if (i %% 25 == 0) message(glue::glue("  {i}/{nrow(textos)}…"))
+    if (i %% 25 == 0) message(glue::glue("  {i}/{nrow(textos)} (fallos: {fallos})…"))
   }
-  nuevas <- tibble(id = textos$id, postura = replace_na(posturas, "neutra"))
+  # IMPORTANTE: los fallos de la API (NA, p. ej. por cuota agotada) NO se guardan
+  # como "neutra" — quedan FUERA de la caché para reintentarse en la próxima
+  # corrida. Solo entran a la caché las que el modelo sí clasificó.
+  nuevas <- tibble(id = textos$id, postura = posturas) |> filter(!is.na(postura))
+  if (fallos > 0) {
+    message(glue::glue("⚠️  {fallos} noticias fallaron (cuota/red) y quedan pendientes ",
+                       "para la próxima corrida. Clasificadas ahora: {nrow(nuevas)}."))
+  }
 }
 
 # 3. Guardar caché + agregados -----------------------------------------------
