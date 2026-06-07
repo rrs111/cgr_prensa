@@ -105,8 +105,9 @@ clasificar_ollama <- function(texto) {
   r <- tryCatch(
     request(OLLAMA_URL) |>
       req_body_json(list(model = OLLAMA_MODELO, prompt = armar_prompt(texto),
-                         stream = FALSE, options = list(temperature = 0, seed = 1))) |>
-      req_timeout(90) |> req_perform() |> resp_body_json(),
+                         stream = FALSE, keep_alive = "15m",   # no recargar el modelo
+                         options = list(temperature = 0, seed = 1, num_predict = 8))) |>
+      req_timeout(180) |> req_perform() |> resp_body_json(),   # margen para CPU
     error = function(e) NULL
   )
   if (is.null(r) || is.null(r$response)) return(NA_character_)
@@ -146,7 +147,7 @@ nuevas <- tibble(id = character(), postura = character())
 if (nrow(pendientes) > 0) {
   textos <- pendientes |>
     mutate(texto = str_squish(paste(titulo, coalesce(bajada, ""),
-                                    substr(coalesce(cuerpo, ""), 1, 1800))))
+                                    substr(coalesce(cuerpo, ""), 1, 900))))
   posturas <- character(nrow(textos))
   fallos <- 0L
   for (i in seq_len(nrow(textos))) {
