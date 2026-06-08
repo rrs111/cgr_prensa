@@ -1,0 +1,10 @@
+name: cgr_prensa
+title: CGR Prensa <e2><80><94> Monitor de Medios
+username: renators
+account: renators
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17457157
+bundleId: 12096489
+url: https://renators.shinyapps.io/cgr_prensa/
+version: 1

@@ -75,16 +75,22 @@ normalizar_texto <- function(x) {
 #
 # Se usan prefijos (sin \\b final) para cubrir todas las flexiones:
 #   "contralor"  -> contraloría, contralor, contralora, contralores, contralorías
-#   "dictam"     -> dictamen, dictámenes, dictaminó
+#
+# IMPORTANTE: solo se incluyen términos INEQUÍVOCOS de la CGR. Se quitaron a
+# propósito términos que otros órganos también usan y producían falsos
+# positivos:
+#   - "dictamen": lo emiten tribunales (incl. deportivos), cortes, fiscalía...
+#     (ej. "Cobreloa vs Colo Colo", "ANFP castigó a jugador").
+#   - "sumario administrativo" / "responsabilidad administrativa": los instruye
+#     cualquier servicio público y la Corte (ej. "Suprema confirma suspensión").
+# Las noticias de dictámenes/sumarios DE la CGR igual entran, porque mencionan
+# "Contraloría" (capturado por "contralor").
 # —--------------------------------------------------------------------------
 nucleo_cgr <- c(
   "contralor",                       # contraloría/contralor/contralora/regional/general
   "dorothy perez",
-  "toma de razon",
-  "dictam",                          # dictamen / dictámenes / dictaminó
-  "sumario administrativo",
-  "juicio de cuentas",
-  "responsabilidad administrativa"
+  "toma de razon",                   # trámite exclusivo de la CGR
+  "juicio de cuentas"                # procedimiento exclusivo de la CGR
 )
 
 # regex del núcleo: "cgr" como palabra completa; prefijos sin límite final;

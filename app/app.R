@@ -624,16 +624,16 @@ ui <- page_navbar(
                     min = rango_fechas[1], max = rango_fechas[2],
                     value = rango_fechas, timeFormat = "%b %Y")
       ),
-      card(card_header("Evolución temporal de términos"),
-           withSpinner(plotlyOutput("g_tendencia", height = 380))),
-      card(card_header("Palabras emergentes (últimas 2 semanas vs. anteriores)"),
-           withSpinner(plotlyOutput("g_emergentes", height = 320))),
       card(card_header("Red de co-ocurrencia (qué palabras aparecen juntas)"),
            withSpinner(plotlyOutput("g_red", height = 520)),
            div(class = "cgr-footer", style = "text-align:left;",
                "Top 50 términos por fuerza de co-ocurrencia (ventana de 5 ",
                "palabras). Layout Fruchterman-Reingold. Tamaño del nodo y grosor ",
-               "de la arista proporcionales al peso."))
+               "de la arista proporcionales al peso.")),
+      card(card_header("Evolución temporal de términos"),
+           withSpinner(plotlyOutput("g_tendencia", height = 380))),
+      card(card_header("Palabras emergentes (últimas 2 semanas vs. anteriores)"),
+           withSpinner(plotlyOutput("g_emergentes", height = 320)))
     )
   ),
 

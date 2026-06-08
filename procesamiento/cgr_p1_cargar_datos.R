@@ -71,14 +71,19 @@ datos <- datos |>
   mutate(
     bajada = replace_na(bajada, ""),
     cuerpo = replace_na(cuerpo, ""),
+    # filtro de relevancia: SOLO título + bajada (el cuerpo a veces trae
+    # contaminación del scraping —menús, "noticias relacionadas"— que menciona
+    # "Contraloría" y generaba falsos positivos como "robo a adulta mayor").
+    texto_filtro = str_squish(paste(titulo, bajada)),
     texto = str_squish(paste(titulo, bajada, cuerpo))
   )
 
 # 5. FILTRO DE RELEVANCIA CGR ---------------------------------------------------
 n_antes <- nrow(datos)
 datos <- datos |>
-  filter(es_relevante_cgr(texto)) |>
-  mutate(categorias = categorias_cgr(texto))
+  filter(es_relevante_cgr(texto_filtro)) |>
+  mutate(categorias = categorias_cgr(texto)) |>
+  select(-texto_filtro)
 
 message(glue::glue("Noticias relacionadas con la CGR: {nrow(datos)} de {n_antes}"))
 
@@ -119,6 +124,13 @@ if (file.exists("datos/cgr_datos.parquet")) {
     message(glue::glue("Acumulado: {n_previo} previas + nuevas = {nrow(datos_prensa)} noticias"))
   }
 }
+
+# 7b. Solo noticias scrapeadas por nosotros -------------------------------------
+# Se descarta cualquier noticia importada de muestras externas (url muestra2025://);
+# el corpus contiene únicamente lo recolectado por el scraping propio.
+n_corpus <- nrow(datos_prensa)
+datos_prensa <- datos_prensa |> filter(startsWith(url, "http"))
+message(glue::glue("Solo scrapeadas (sin muestra externa): {nrow(datos_prensa)} de {n_corpus}"))
 
 # 8. Guardar --------------------------------------------------------------------
 if (!dir.exists("datos")) dir.create("datos")

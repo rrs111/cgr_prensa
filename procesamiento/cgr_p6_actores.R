@@ -71,8 +71,28 @@ markers_org <- c(
   "Sindicato", "Partido", "Fiscalía", "Defensoría", "Policía",
   "Superintendencia", "Subsecretaría", "Dirección", "Departamento",
   "Empresa", "Sociedad", "Grupo", "Constructora", "Frente", "Confederación",
-  "Colegio", "Instituto", "Centro", "Movimiento", "Coordinadora"
+  "Colegio", "Instituto", "Centro", "Movimiento", "Coordinadora",
+  # instituciones que aparecían mal clasificadas como persona
+  "Contraloría", "Suprema", "Apelaciones", "Gobierno", "Municipalidad",
+  "Intendencia", "Gobernación", "Codelco", "Metro", "Sename", "Sernac",
+  "Subsecretaría", "Agencia", "Junta", "Comité", "Secretaría", "Oficina",
+  "Hospital", "Sociedad", "Aduanas", "Moneda", "Aduana", "Tesorería",
+  "Registro", "Subsecretaria"
 )
+# regex que detecta el marcador en CUALQUIER posición de la entidad
+markers_org_regex <- paste0("\\b(", paste(unique(normalizar_texto(markers_org)),
+                                          collapse = "|"), ")\\b")
+
+# Cargos que, como PREFIJO, anteceden a un nombre de persona y deben quitarse
+# para no confundir ("Contralora Dorothy Pérez" -> persona "Dorothy Pérez").
+cargos_prefijo <- normalizar_texto(c(
+  "contralor", "contralora", "ministro", "ministra", "subsecretario",
+  "subsecretaria", "alcalde", "alcaldesa", "exalcalde", "exalcaldesa",
+  "gobernador", "gobernadora", "presidente", "presidenta", "expresidente",
+  "fiscal", "senador", "senadora", "diputado", "diputada", "director",
+  "directora", "seremi", "exministro", "exministra", "juez", "jueza",
+  "general", "coronel", "prefecto"))
+cargos_pref_regex <- paste0("^(", paste(unique(cargos_prefijo), collapse = "|"), ")\\s+")
 
 # Acronimos all-caps 2-6 (CGR ya excluido)
 acronimo_re <- "^[A-ZÑ]{2,6}$"
@@ -109,7 +129,15 @@ excluir <- normalizar_texto(c(
   "Interferencia", "El Líbero", "The Clinic", "BioBioChile", "Meganoticias",
   "La Nación", "Agricultura", "Publimetro", "Radio U. de Ch.",
   "El Ciudadano", "24 Horas", "ADN Radio", "CHV Noticias", "La Hora",
-  "La Cuarta", "La Izquierda Diario", "El Siglo"
+  "La Cuarta", "La Izquierda Diario", "El Siglo",
+  # fragmentos sueltos de nombres de medios que udpipe separa ("La Tercera"->"Tercera")
+  "Tercera", "Segunda", "Clinic", "Mostrador", "Dínamo", "Líbero",
+  "Mercurio", "Bío", "Bío Bío", "Biobío",
+  # meses, días y palabras genéricas que udpipe etiqueta como PROPN por la mayúscula
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
+  "Septiembre", "Octubre", "Noviembre", "Diciembre",
+  "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo",
+  "Patrimonio", "Estado", "País", "Día", "Ley", "Plan", "Caso", "Informe"
 ))
 
 # Cargos: sustantivos comunes de interés (no salen como PROPN)
@@ -150,16 +178,20 @@ entidades_propn <- propn |>
 # 6. Clasificar tipo (organización / lugar / persona) ----------------------------
 clasif <- entidades_propn |>
   mutate(
-    es_acronimo_full  = str_detect(entidad, acronimo_re) & n_tokens == 1,
-    es_acronimo_inicio = str_detect(primer, acronimo_re),   # ej. "CIPER Chile"
-    es_lugar    = entidad_norm %in% lugares_norm,
-    es_org      = primer %in% markers_org | es_acronimo_full | es_acronimo_inicio,
+    # quitar el cargo-prefijo del nombre (Contralora Dorothy Pérez -> Dorothy Pérez)
+    entidad      = str_squish(str_remove(entidad, regex(cargos_pref_regex, ignore_case = TRUE))),
+    entidad_norm = str_squish(str_remove(entidad_norm, cargos_pref_regex)),
+    n_tokens     = str_count(entidad_norm, "\\S+"),
+    es_acronimo  = str_detect(entidad, acronimo_re) & n_tokens == 1,
+    es_org       = str_detect(entidad_norm, markers_org_regex) | es_acronimo,
+    es_lugar     = entidad_norm %in% lugares_norm,
     tipo = case_when(
       es_org   ~ "organizacion",
       es_lugar ~ "lugar",
       TRUE     ~ "persona"
     )
   ) |>
+  filter(nchar(entidad_norm) >= 3, !entidad_norm %in% excluir) |>
   select(doc_id, entidad, entidad_norm, tipo)
 
 # 7. Cargos (NOUN de la lista controlada) ---------------------------------------
