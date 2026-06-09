@@ -50,20 +50,22 @@ cgr_prensa/
 ├── cgr_procesar.R               # ORQUESTADOR de procesamiento (p1→p3)
 ├── scraping/
 │   ├── cgr_scraping.R           # ORQUESTADOR de scraping (todas las fuentes)
-│   ├── cgr_scraping_funciones.R # motor de scraping (polite + rvest + chromote)
+│   ├── cgr_scraping_funciones.R # motor de scraping (polite + rvest + chromote + RSS)
 │   ├── cgr_obtener_emol.R       # un módulo por medio (17 en total)
+│   ├── cgr_obtener_googlenews.R # Google News RSS: medios con paywall/Cloudflare
 │   └── ...
 ├── procesamiento/
-│   ├── cgr_p1_cargar_datos.R    # cargar + limpiar + dedup + FILTRO CGR
+│   ├── cgr_p1_cargar_datos.R    # cargar + limpiar + dedup + FILTRO CGR + corte temporal
 │   ├── cgr_p2_tokenizar.R       # tokenizar + stopwords + stemming
 │   ├── cgr_p3_contar_palabras.R # frecuencias semana/fuente + TF-IDF
 │   ├── cgr_p4_sentimiento.R     # tono de la cobertura (léxico ES) + presión
-│   ├── cgr_p5_temas.R           # modelado de temas (stm, K=8)
+│   ├── cgr_p5_temas.R           # [retirado del pipeline] temas (stm) — corre a mano
 │   ├── cgr_p6_actores.R         # entidades / NER (udpipe español)
-│   ├── cgr_p7_red.R             # red de co-ocurrencia (quanteda + igraph)
+│   ├── cgr_p7_red.R             # [retirado del pipeline] red de co-ocurrencia
+│   ├── cgr_sentimiento_llm.R    # postura hacia la CGR (LLM local vía Ollama)
 │   └── cgr_importar_muestra.R   # importar muestra externa (ej. 10.000 de 2025)
 ├── app/
-│   ├── app.R                    # app Shiny (7 pestañas, plotly, paleta CGR)
+│   ├── app.R                    # app Shiny (6 pestañas, plotly, paleta CGR)
 │   └── www/cgr_styles.css       # estética corporativa
 ├── datos/
 │   ├── cgr_terminos.R           # términos de relevancia CGR + stopwords
@@ -137,18 +139,27 @@ Los selectores CSS fueron verificados visitando cada sitio en vivo
 | Emol             | rvest    | — (secciones)  | ✅ completo |
 | T13              | rvest    | — (secciones)  | ✅ completo |
 | El Líbero        | rvest    | — (secciones)  | ✅ completo |
-| La Segunda       | rvest    | — (3 secciones)| ⚠️ paywall: título + bajada + fecha |
-| Diario Financiero| rvest    | — (secciones)  | ⚠️ paywall/anti-bot: título + bajada |
-| La Tercera       | chromote | ✅ `?s=` (~100) | ✅ requiere Chrome (render JS, Arc) |
-| The Clinic       | chromote | —              | ❌ bloqueado por Cloudflare (ni Chrome pasa) |
-| Ex-Ante          | chromote | —              | ❌ bloqueado por Cloudflare (ni Chrome pasa) |
+| La Tercera       | chromote | ✅ `?s=` (~100) | ✅ requiere Chrome (render JS) |
+| La Segunda       | rvest + Google News RSS | ✅ | ⚠️ paywall: titular + bajada + fecha |
+| Diario Financiero| Google News RSS | ✅ | ⚠️ paywall: titular + fecha + enlace |
+| The Clinic       | Google News RSS | ✅ | ⚠️ Cloudflare: titular + fecha + enlace |
+| Ex-Ante          | Google News RSS | ✅ | ⚠️ Cloudflare: titular + fecha + enlace |
 
+> **Google News RSS** (`cgr_obtener_googlenews.R`): los medios con paywall duro
+> o Cloudflare (La Segunda, Diario Financiero, The Clinic, Ex-Ante) no se pueden
+> scrapear directo, pero su cobertura sí se captura vía el RSS de Google News
+> (consulta `contraloria OR contralor… site:medio.cl`). Se obtiene titular,
+> fecha y enlace (redirect de Google que lleva a la nota original): suficiente
+> para el filtro CGR —que usa titular+bajada— y el monitoreo de cobertura,
+> aunque sin cuerpo para los análisis de texto profundos. P1 deduplica por
+> titular dentro de cada fuente, así una nota capturada por dos vías entra solo
+> una vez (gana la versión con más texto).
+>
 > **chromote** necesita Chrome/Chromium instalado (`brew install --cask google-chrome`;
 > los workflows de GitHub Actions ya lo instalan). En entornos restringidos/CI se
-> lanza con `--no-sandbox`. **La Tercera** funciona así. **The Clinic** y **Ex-Ante**
-> están tras Cloudflare y ni con Chrome headless se pueden scrapear (devuelven la
-> página de desafío); sus módulos quedan por completitud y normalmente dan 0.
-> Si no hay Chrome, esos módulos no devuelven datos (se registra) y el resto continúa.
+> lanza con `--no-sandbox`. **La Tercera** funciona así. Los módulos directos de
+> The Clinic, Ex-Ante y DF quedan deshabilitados (Cloudflare/paywall les hace dar
+> 0); se pueden forzar con `CGR_FUENTES="df,exante,theclinic"`.
 
 ---
 
@@ -164,9 +175,12 @@ cada noticia con las **categorías** que menciona (`institucional`, `funciones`,
 
 ## Procesamiento de texto
 
-1. **P1 – Cargar datos:** unifica los `.rds`, limpia, deduplica por URL,
-   interpreta fechas, **filtra por relevancia CGR** y **acumula** con el corpus
-   previo (`datos/cgr_datos.parquet`).
+1. **P1 – Cargar datos:** unifica los `.rds`, limpia, deduplica por URL y por
+   titular (misma nota vía scraping directo y vía Google News), interpreta
+   fechas, **filtra por relevancia CGR**, aplica el **corte temporal del
+   monitoreo** (solo noticias desde el 1 de mayo de 2026, fecha en que comenzó
+   el scraping propio; configurable con `CGR_FECHA_MIN`) y **acumula** con el
+   corpus previo (`datos/cgr_datos.parquet`).
 2. **P2 – Tokenizar:** `{tidytext}` + stopwords (español + propias) + stemming
    con `{SnowballC}` (agrupa conjugaciones en una sola forma).
 3. **P3 – Contar palabras:** frecuencia por semana y por fuente; TF-IDF por
@@ -203,29 +217,32 @@ Rscript cgr_procesar.R    # recalcula tokens/conteos
 
 ## App Shiny
 
-7 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
+6 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
 (paleta **Navy `#1B1F49` / Teal `#74CEC4` / Rosa `#F2567A` / Crema `#F4F2E5`**,
-tipografías **DM Sans** + **DM Serif Display**):
+tipografías **DM Sans** + **DM Serif Display**). Los análisis solo muestran
+cobertura **desde mayo de 2026** (inicio del scraping propio):
 
 1. **Resumen** — métricas, noticias por semana, distribución por fuente, top
-   palabras, nube de palabras.
+   palabras, nube de palabras y últimos titulares con su tono.
 2. **Tono** — métricas de tono (score, % negativas/positivas, presión última
    semana); evolución del tono por semana; índice de presión mediática;
    ranking de medios de más crítico a más favorable; composición del tono
-   por semana (área apilada).
-3. **Temas** — modelado de tópicos (`{stm}`, K=8): selector de tema, top
-   términos por β, prevalencia de los temas a lo largo del tiempo (área
-   apilada) y artículos más representativos de cada tema.
-4. **Actores** — entidades nombradas (NER con `{udpipe}`): métricas por tipo
+   por semana; y **postura hacia la CGR** (LLM local vía Ollama).
+3. **Actores** — entidades nombradas (NER con `{udpipe}`): métricas por tipo
    (personas, organizaciones, lugares, cargos), ranking de actores más
    mencionados con filtros, evolución de los top 5 y tabla con cobertura.
-5. **Tendencias** — evolución temporal de hasta 5 términos, palabras emergentes
-   (últimas 2 semanas vs. anteriores) y **red de co-ocurrencia** (qué
-   términos aparecen juntos, layout Fruchterman-Reingold con `{igraph}`).
-6. **Fuentes** — comparación entre medios: conteo, palabras frecuentes, TF-IDF.
-7. **Noticias** — buscador con filtros y tabla con enlaces (badge de tono por
+4. **Tendencias** — evolución temporal de hasta 5 términos y palabras
+   emergentes (últimas 2 semanas vs. anteriores).
+5. **Fuentes** — comparación entre medios: conteo y palabras frecuentes.
+6. **Noticias** — buscador con filtros y tabla con enlaces (badge de tono por
    noticia) + **KWIC** (palabra en contexto): frases reales donde aparece un
    término, con resaltado e insensible a tildes.
+
+> Las pestañas de **Temas** (stm) y la **red de co-ocurrencia** se retiraron de
+> la app: con un corpus aún chico daban resultados poco confiables y eran poco
+> pertinentes para la oficina de medios. Sus scripts siguen en `procesamiento/`
+> (`cgr_p5_temas.R`, `cgr_p7_red.R`) por si se quieren reincorporar cuando el
+> corpus crezca.
 
 ```bash
 Rscript -e 'shiny::runApp("app")'

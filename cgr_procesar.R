@@ -5,8 +5,13 @@
 #
 #   1. Cargar + limpiar + deduplicar + FILTRAR por relevancia CGR
 #   2. Tokenizar (stopwords + stemming)
-#   3. Conteos por semana / fuente + TF-IDF
+#   3. Conteos por semana / fuente
 #   4. Tono / sentimiento de la cobertura (léxico ES)
+#   6. Actores / entidades nombradas (NER con udpipe)
+#
+# (Los pasos 5-temas y 7-red se retiraron de la app por poco pertinentes para
+#  la oficina de medios y poco confiables con un corpus aún chico; sus scripts
+#  siguen en procesamiento/ y pueden correrse a mano si se quieren de vuelta.)
 #
 # Uso:  Rscript cgr_procesar.R
 
@@ -20,11 +25,9 @@ notificacion("CGR Prensa", "Iniciando procesamiento…")
 # relecturas innecesarias de disco (cada paso hace un fallback a read_parquet).
 source("procesamiento/cgr_p1_cargar_datos.R")    # -> datos/cgr_datos.parquet
 source("procesamiento/cgr_p2_tokenizar.R")       # -> datos/cgr_palabras.parquet
-source("procesamiento/cgr_p3_contar_palabras.R") # -> conteos + tfidf
+source("procesamiento/cgr_p3_contar_palabras.R") # -> conteos por semana/fuente
 source("procesamiento/cgr_p4_sentimiento.R")     # -> tono por noticia/semana/fuente
-source("procesamiento/cgr_p5_temas.R")           # -> temas latentes (stm)
 source("procesamiento/cgr_p6_actores.R")         # -> entidades (NER con udpipe)
-source("procesamiento/cgr_p7_red.R")             # -> co-ocurrencia + red precomputada
 
 tiempo <- round(difftime(now(), inicio, units = "mins"), 2)
 message(glue::glue("\n==== Procesamiento completo en {tiempo} min ===="))

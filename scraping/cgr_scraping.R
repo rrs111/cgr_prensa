@@ -31,16 +31,21 @@ modulos_rvest <- c("emol", "biobio", "cooperativa", "cnnchile", "elmostrador",
                    "eldinamo", "ciper", "pauta", "t13", "interferencia",
                    "ellibero", "eldesconcierto")
 modulos_paywall <- c("lasegunda")
-modulos_js <- c("latercera", "theclinic")
+# googlenews cubre por RSS los medios inaccesibles directo:
+# La Segunda (refuerzo), Diario Financiero, The Clinic y Ex-Ante.
+modulos_rss <- c("googlenews")
+modulos_js <- c("latercera")
 
-# Fuentes DESHABILITADAS por dar 0 noticias de forma garantizada:
-#   - df     : paywall de Diario Financiero (no se obtiene cuerpo ni titular útil)
-#   - exante : bloqueado por Cloudflare incluso con Chrome headless
-# Sus módulos siguen existiendo (cgr_obtener_df.R / _exante.R) y pueden correrse
-# a mano con CGR_FUENTES="df,exante" si algún día cambian de plataforma.
-modulos_deshabilitados <- c("df", "exante")
+# Fuentes DESHABILITADAS para scraping directo (su cobertura llega vía el
+# módulo googlenews):
+#   - df       : paywall de Diario Financiero (no se obtiene cuerpo ni titular útil)
+#   - exante   : bloqueado por Cloudflare incluso con Chrome headless
+#   - theclinic: bloqueado por Cloudflare incluso con Chrome headless
+# Sus módulos siguen existiendo y pueden correrse a mano con
+# CGR_FUENTES="df,exante,theclinic" si algún día cambian de plataforma.
+modulos_deshabilitados <- c("df", "exante", "theclinic")
 
-modulos <- c(modulos_rvest, modulos_paywall, modulos_js)
+modulos <- c(modulos_rvest, modulos_paywall, modulos_rss, modulos_js)
 
 # Permitir limitar a algunas fuentes vía variable de entorno.
 # Si se piden explícitamente, se permite incluso reactivar las deshabilitadas

@@ -87,11 +87,12 @@ datos <- datos |>
 
 message(glue::glue("Noticias relacionadas con la CGR: {nrow(datos)} de {n_antes}"))
 
-# 5b. CORTE TEMPORAL: solo cobertura desde 2025 ---------------------------------
-# El monitoreo se enfoca en la cobertura reciente; se descartan noticias
-# anteriores a esta fecha (configurable con CGR_FECHA_MIN).
-fecha_min <- suppressWarnings(as_date(Sys.getenv("CGR_FECHA_MIN", "2025-01-01")))
-if (is.na(fecha_min)) fecha_min <- as_date("2025-01-01")
+# 5b. CORTE TEMPORAL: solo desde el inicio del monitoreo ------------------------
+# El scraping propio comenzó en mayo de 2026; los buscadores de los medios
+# devuelven también notas antiguas, que aquí se descartan para que los análisis
+# reflejen solo el período monitoreado (configurable con CGR_FECHA_MIN).
+fecha_min <- suppressWarnings(as_date(Sys.getenv("CGR_FECHA_MIN", "2026-05-01")))
+if (is.na(fecha_min)) fecha_min <- as_date("2026-05-01")
 n_pre <- sum(datos$fecha < fecha_min, na.rm = TRUE)
 datos <- datos |> filter(!is.na(fecha), fecha >= fecha_min)
 message(glue::glue("Corte temporal (>= {fecha_min}): se descartaron {n_pre}; quedan {nrow(datos)}"))
@@ -131,6 +132,29 @@ if (file.exists("datos/cgr_datos.parquet")) {
 n_corpus <- nrow(datos_prensa)
 datos_prensa <- datos_prensa |> filter(startsWith(url, "http"))
 message(glue::glue("Solo scrapeadas (sin muestra externa): {nrow(datos_prensa)} de {n_corpus}"))
+
+# 7c. Corte temporal sobre el corpus ACUMULADO ----------------------------------
+# El corpus previo puede traer noticias anteriores al inicio del monitoreo
+# (acumuladas cuando el corte era más laxo); se aplican el mismo límite.
+n_corpus <- nrow(datos_prensa)
+datos_prensa <- datos_prensa |> filter(!is.na(fecha), fecha >= fecha_min)
+if (n_corpus > nrow(datos_prensa)) {
+  message(glue::glue("Corte temporal del acumulado: {n_corpus - nrow(datos_prensa)} descartadas"))
+}
+
+# 7d. Deduplicar por titular dentro de cada fuente -------------------------------
+# La misma nota puede entrar dos veces con URLs distintas (scraping directo y
+# Google News RSS). Se conserva la versión con más texto (bajada/cuerpo).
+n_corpus <- nrow(datos_prensa)
+datos_prensa <- datos_prensa |>
+  mutate(.titulo_norm = stringi::stri_trans_general(tolower(titulo), "Latin-ASCII")) |>
+  arrange(desc(nchar(paste(replace_na(bajada, ""), replace_na(cuerpo, ""))))) |>
+  distinct(fuente, .titulo_norm, .keep_all = TRUE) |>
+  select(-.titulo_norm) |>
+  arrange(desc(fecha))
+if (n_corpus > nrow(datos_prensa)) {
+  message(glue::glue("Dedup por titular: {n_corpus - nrow(datos_prensa)} duplicadas descartadas"))
+}
 
 # 8. Guardar --------------------------------------------------------------------
 if (!dir.exists("datos")) dir.create("datos")

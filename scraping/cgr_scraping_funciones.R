@@ -242,6 +242,65 @@ buscar_fuente <- function(fuente, plantilla_busqueda, terminos, patron, sel_cuer
   invisible(datos)
 }
 
+# —--------------------------------------------------------------------------
+# Google News RSS: vía de acceso para medios con paywall o Cloudflare
+# —--------------------------------------------------------------------------
+# Para medios que no se pueden scrapear directo (La Segunda, Diario Financiero,
+# The Clinic, Ex-Ante), Google News RSS entrega titular + fecha + enlace sin
+# bloqueo. No hay bajada ni cuerpo, pero el titular basta para el filtro de
+# relevancia CGR (que usa título+bajada) y para el monitoreo de cobertura.
+# El enlace es el redirect de Google (estable por artículo: sirve para
+# deduplicar y, al hacer clic, lleva a la nota original).
+buscar_google_news <- function(fuente, consulta, max_items = 100) {
+  message(glue("\n===== {fuente} (Google News RSS) ====="))
+  url <- paste0(
+    "https://news.google.com/rss/search?q=", utils::URLencode(consulta, reserved = TRUE),
+    "&hl=es-419&gl=CL&ceid=CL:es-419"
+  )
+  feed <- tryCatch({
+    resp <- httr2::request(url) |>
+      httr2::req_user_agent(UA_CGR) |>
+      httr2::req_timeout(30) |>
+      httr2::req_perform()
+    xml2::read_xml(httr2::resp_body_raw(resp))
+  }, error = function(e) {
+    message("  error Google News (", fuente, "): ", conditionMessage(e)); NULL
+  })
+  if (is.null(feed)) return(invisible(NULL))
+
+  items <- xml2::xml_find_all(feed, ".//item")
+  if (length(items) == 0) { message("  0 ítems"); return(invisible(NULL)) }
+  items <- head(items, max_items)
+
+  titulo <- xml2::xml_text(xml2::xml_find_first(items, "./title"))
+  enlace <- xml2::xml_text(xml2::xml_find_first(items, "./link"))
+  pubdate <- xml2::xml_text(xml2::xml_find_first(items, "./pubDate"))
+  medio <- xml2::xml_text(xml2::xml_find_first(items, "./source"))
+
+  # quitar el sufijo " - Medio" que Google añade al titular
+  titulo <- str_remove(titulo, "\\s+[-–]\\s+[^-–]{2,60}$") |> str_squish()
+
+  fecha <- suppressWarnings(
+    lubridate::parse_date_time(pubdate, orders = "a, d b Y H:M:S", locale = "C")
+  )
+
+  datos <- tibble(
+    titulo = titulo,
+    bajada = NA_character_,
+    cuerpo = NA_character_,
+    fecha = format(as.Date(fecha), "%Y-%m-%d"),
+    fuente = fuente,
+    url = enlace,
+    fecha_scraping = now()
+  ) |>
+    filter(!is.na(titulo), nchar(titulo) > 15, !is.na(url)) |>
+    distinct(url, .keep_all = TRUE)
+
+  revisar_scraping(datos, fuente)
+  if (nrow(datos) > 0) saveRDS(datos, ruta_resultado(fuente, "_gnews"))
+  invisible(datos)
+}
+
 # Punto de entrada estándar de cada módulo. Controla el modo mediante variables
 # de entorno (para que el orquestador o el usuario lo ajuste sin editar módulos):
 #   CGR_MODO   "completo" (def.) = búsqueda CGR + secciones recientes
