@@ -39,9 +39,15 @@ crudo <- map(archivos, function(a) {
 message(glue::glue("Noticias crudas: {nrow(crudo)}"))
 
 # 2. Limpieza y deduplicación ---------------------------------------------------
+# Regex de títulos basura: páginas de archivo/índice/paginación que a veces
+# cuela Google News o el listado de un medio ("Contraloría archivos | Página 58").
+TITULO_BASURA <- stringr::regex("p[áa]gina \\d+ de \\d+|archivos?\\s*\\||\\| archivo",
+                                ignore_case = TRUE)
+
 datos <- crudo |>
   # columnas mínimas
   filter(!is.na(titulo), nchar(titulo) > 15) |>
+  filter(!str_detect(titulo, TITULO_BASURA)) |>
   distinct(url, .keep_all = TRUE) |>
   mutate(
     titulo = limpiar_texto_poquito(titulo),
@@ -130,7 +136,10 @@ if (file.exists("datos/cgr_datos.parquet")) {
 # Se descarta cualquier noticia importada de muestras externas (url muestra2025://);
 # el corpus contiene únicamente lo recolectado por el scraping propio.
 n_corpus <- nrow(datos_prensa)
-datos_prensa <- datos_prensa |> filter(startsWith(url, "http"))
+datos_prensa <- datos_prensa |>
+  filter(startsWith(url, "http")) |>
+  # mismo filtro anti-índices sobre el acumulado (limpia filas ya guardadas)
+  filter(!str_detect(titulo, TITULO_BASURA))
 message(glue::glue("Solo scrapeadas (sin muestra externa): {nrow(datos_prensa)} de {n_corpus}"))
 
 # 7c. Corte temporal sobre el corpus ACUMULADO ----------------------------------

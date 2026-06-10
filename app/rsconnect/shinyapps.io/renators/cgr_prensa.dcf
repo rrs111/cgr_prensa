@@ -5,6 +5,6 @@ account: renators
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 17457157
-bundleId: 12101216
+bundleId: 12106210
 url: https://renators.shinyapps.io/cgr_prensa/
 version: 1
