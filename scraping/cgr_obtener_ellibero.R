@@ -11,6 +11,7 @@ ejecutar_modulo(
   ),
   patron         = "ellibero\\.cl/[a-z-]+/[a-z0-9-]{20,}/?$",
   sel_cuerpo     = ".entry-content",
+  bing_dominio = "ellibero.cl",
   base           = "https://ellibero.cl",
   plantilla_hist = "https://ellibero.cl/actualidad/page/{n}/"
 )

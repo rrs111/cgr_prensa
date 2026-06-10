@@ -12,5 +12,6 @@ ejecutar_modulo(
   ),
   patron     = "/noticias/[a-z-]+/.+/\\d{4}-\\d{2}-\\d{2}/\\d+\\.html$",
   sel_cuerpo = "#cuerpo-ad",
+  bing_dominio = "cooperativa.cl",
   base       = "https://www.cooperativa.cl"
 )

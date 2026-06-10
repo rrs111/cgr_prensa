@@ -12,5 +12,6 @@ ejecutar_modulo(
   ),
   patron     = "/noticias/[A-Za-z]+/\\d{4}/\\d{2}/\\d{2}/",
   sel_cuerpo = ".EmolText",
+  bing_dominio = "emol.com",
   base       = "https://www.emol.com"
 )

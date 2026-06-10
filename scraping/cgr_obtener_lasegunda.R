@@ -15,5 +15,6 @@ ejecutar_modulo(
   ),
   patron     = "/Noticias/[A-Za-z-]+/\\d{4}/\\d{2}/\\d+/",
   sel_cuerpo = "article",   # paywall: normalmente vacío; la señal va en la bajada
+  bing_dominio = "lasegunda.com",
   base       = "https://www.lasegunda.com"
 )

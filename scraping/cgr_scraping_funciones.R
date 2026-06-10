@@ -301,6 +301,58 @@ buscar_google_news <- function(fuente, consulta, max_items = 100) {
   invisible(datos)
 }
 
+# —--------------------------------------------------------------------------
+# Bing News RSS: búsqueda para medios SIN buscador propio en su sitio
+# —--------------------------------------------------------------------------
+# A diferencia de Google News, el RSS de Bing trae la URL real del artículo
+# (en el parámetro url= de su redirect apiclick.aspx), así que sirve como
+# DESCUBRIMIENTO y luego cada nota se scrapea completa del sitio del medio
+# (con el mismo selector de cuerpo del módulo). Ideal para Emol, Cooperativa,
+# T13 o El Líbero, que no tienen búsqueda por URL.
+buscar_bing_news <- function(fuente, dominio, patron, sel_cuerpo, base = "",
+                             js = FALSE, max_articulos = NULL, pausa = c(1, 3),
+                             paginas = 2) {
+  message(glue("\n===== {fuente} (Bing News RSS) ====="))
+  q <- utils::URLencode(
+    glue('(contraloria OR contralor OR contralora OR "dorothy perez") site:{dominio}'),
+    reserved = TRUE
+  )
+  enlaces <- map(seq_len(paginas), function(p) {
+    url <- glue("https://www.bing.com/news/search?q={q}&format=rss&first={(p - 1) * 12 + 1}")
+    feed <- tryCatch({
+      resp <- httr2::request(url) |>
+        httr2::req_user_agent(UA_CGR) |>
+        httr2::req_timeout(30) |>
+        httr2::req_perform()
+      xml2::read_xml(httr2::resp_body_raw(resp))
+    }, error = function(e) {
+      message("  error Bing News (", fuente, "): ", conditionMessage(e)); NULL
+    })
+    if (is.null(feed)) return(character(0))
+    links <- xml2::xml_text(xml2::xml_find_all(feed, ".//item/link"))
+    # URL real desde el redirect de Bing (param url=); si no hay, el link tal cual
+    crudos <- str_match(links, "[?&]url=([^&]+)")[, 2]
+    reales <- ifelse(is.na(crudos), links,
+                     vapply(crudos, function(x) utils::URLdecode(x), character(1)))
+    pausar(pausa[1], pausa[2])
+    reales
+  }) |> unlist() |> unique()
+
+  enlaces <- enlaces[!is.na(enlaces) & str_detect(enlaces, patron)]
+  if (!continuar_si_hay_enlaces(enlaces)) return(invisible(NULL))
+  if (!is.null(max_articulos) && is.finite(max_articulos)) enlaces <- head(enlaces, max_articulos)
+
+  datos <- map(enlaces, function(u) {
+    r <- scrapear_articulo(u, fuente, sel_cuerpo, js)
+    pausar(pausa[1], pausa[2])
+    r
+  }) |> list_rbind()
+
+  revisar_scraping(datos, fuente)
+  if (!is.null(datos) && nrow(datos) > 0) saveRDS(datos, ruta_resultado(fuente, "_bing"))
+  invisible(datos)
+}
+
 # Punto de entrada estándar de cada módulo. Controla el modo mediante variables
 # de entorno (para que el orquestador o el usuario lo ajuste sin editar módulos):
 #   CGR_MODO   "completo" (def.) = búsqueda CGR + secciones recientes
@@ -312,7 +364,7 @@ buscar_google_news <- function(fuente, consulta, max_items = 100) {
 #   CGR_PAUSA_MIN/MAX pausa entre requests en segundos (acelera pruebas)
 ejecutar_modulo <- function(fuente, secciones_reciente, patron, sel_cuerpo,
                             base = "", plantilla_hist = NULL, plantilla_busqueda = NULL,
-                            js = FALSE, pausa = c(1, 3)) {
+                            bing_dominio = NULL, js = FALSE, pausa = c(1, 3)) {
   modo    <- Sys.getenv("CGR_MODO", "completo")
   paginas <- suppressWarnings(as.integer(Sys.getenv("CGR_HIST_PAGINAS", "5")))
   max_art <- suppressWarnings(as.integer(Sys.getenv("CGR_MAX", "")))
@@ -334,9 +386,15 @@ ejecutar_modulo <- function(fuente, secciones_reciente, patron, sel_cuerpo,
                   base = base, js = js, max_articulos = max_art, pausa = pausa)
   }
 
-  # 2) Secciones recientes (modos completo/reciente, o buscar sin buscador propio)
+  # 1b) Búsqueda vía Bing News RSS (medios sin buscador propio en su sitio)
+  if (modo %in% c("buscar", "completo") && !is.null(bing_dominio)) {
+    buscar_bing_news(fuente, bing_dominio, patron, sel_cuerpo, base = base,
+                     js = js, max_articulos = max_art, pausa = pausa)
+  }
+
+  # 2) Secciones recientes (modos completo/reciente, o buscar sin búsqueda alguna)
   if (modo %in% c("reciente", "completo") ||
-      (modo == "buscar" && is.null(plantilla_busqueda))) {
+      (modo == "buscar" && is.null(plantilla_busqueda) && is.null(bing_dominio))) {
     secciones_o_articulo(secciones_reciente, "")
   }
 

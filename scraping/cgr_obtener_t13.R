@@ -13,5 +13,6 @@ ejecutar_modulo(
   ),
   patron     = "/noticia/[a-z]",
   sel_cuerpo = ".cuerpo-content",
+  bing_dominio = "t13.cl",
   base       = "https://www.t13.cl"
 )

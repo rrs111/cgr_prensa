@@ -135,12 +135,12 @@ Los selectores CSS fueron verificados visitando cada sitio en vivo
 | CNN Chile        | rvest    | ✅ `?s=` (~19) | ✅ completo |
 | CIPER            | rvest    | ✅ `?s=` (~16) | ✅ completo |
 | Interferencia    | rvest    | ✅ `search/node` (~10) | ✅ completo |
-| Cooperativa      | rvest    | — (secciones)  | ✅ completo |
-| Emol             | rvest    | — (secciones)  | ✅ completo |
-| T13              | rvest    | — (secciones)  | ✅ completo |
-| El Líbero        | rvest    | — (secciones)  | ✅ completo |
+| Cooperativa      | rvest    | ✅ Bing News RSS | ✅ completo |
+| Emol             | rvest    | ✅ Bing News RSS | ✅ completo |
+| T13              | rvest    | ✅ Bing News RSS | ✅ completo |
+| El Líbero        | rvest    | ✅ Bing News RSS | ✅ completo |
 | La Tercera       | chromote | ✅ `?s=` (~100) | ✅ requiere Chrome (render JS) |
-| La Segunda       | rvest + Google News RSS | ✅ | ⚠️ paywall: titular + bajada + fecha |
+| La Segunda       | rvest + Google/Bing News RSS | ✅ | ⚠️ paywall: titular + bajada + fecha |
 | Diario Financiero| Google News RSS | ✅ | ⚠️ paywall: titular + fecha + enlace |
 | The Clinic       | Google News RSS | ✅ | ⚠️ Cloudflare: titular + fecha + enlace |
 | Ex-Ante          | Google News RSS | ✅ | ⚠️ Cloudflare: titular + fecha + enlace |
@@ -154,6 +154,12 @@ Los selectores CSS fueron verificados visitando cada sitio en vivo
 > aunque sin cuerpo para los análisis de texto profundos. P1 deduplica por
 > titular dentro de cada fuente, así una nota capturada por dos vías entra solo
 > una vez (gana la versión con más texto).
+>
+> **Bing News RSS** (función `buscar_bing_news`): para los medios SIN buscador
+> propio (Emol, Cooperativa, T13, El Líbero, La Segunda). A diferencia de Google
+> News, el RSS de Bing trae la URL real del artículo, así que solo se usa como
+> descubrimiento: cada nota se scrapea completa del sitio del medio (con cuerpo,
+> salvo paywall). Se activa con `bing_dominio = "medio.cl"` en el módulo.
 >
 > **chromote** necesita Chrome/Chromium instalado (`brew install --cask google-chrome`;
 > los workflows de GitHub Actions ya lo instalan). En entornos restringidos/CI se
