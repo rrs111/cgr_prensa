@@ -237,18 +237,18 @@ cobertura **desde mayo de 2026** (inicio del scraping propio):
 3. **Actores** — entidades nombradas (NER con `{udpipe}`): métricas por tipo
    (personas, organizaciones, lugares, cargos), ranking de actores más
    mencionados con filtros, evolución de los top 5 y tabla con cobertura.
-4. **Tendencias** — evolución temporal de hasta 5 términos y palabras
-   emergentes (últimas 2 semanas vs. anteriores).
+4. **Tendencias** — evolución temporal de hasta 5 términos, palabras
+   emergentes (últimas 2 semanas vs. anteriores) y **red de co-ocurrencia**
+   (qué términos aparecen juntos, layout Fruchterman-Reingold con `{igraph}`).
 5. **Fuentes** — comparación entre medios: conteo y palabras frecuentes.
 6. **Noticias** — buscador con filtros y tabla con enlaces (badge de tono por
    noticia) + **KWIC** (palabra en contexto): frases reales donde aparece un
    término, con resaltado e insensible a tildes.
 
-> Las pestañas de **Temas** (stm) y la **red de co-ocurrencia** se retiraron de
-> la app: con un corpus aún chico daban resultados poco confiables y eran poco
-> pertinentes para la oficina de medios. Sus scripts siguen en `procesamiento/`
-> (`cgr_p5_temas.R`, `cgr_p7_red.R`) por si se quieren reincorporar cuando el
-> corpus crezca.
+> La pestaña de **Temas** (stm) se retiró de la app: con un corpus aún chico
+> daba resultados poco confiables y poco pertinentes para la oficina de medios.
+> Su script sigue en `procesamiento/cgr_p5_temas.R` por si se quiere
+> reincorporar cuando el corpus crezca.
 
 ```bash
 Rscript -e 'shiny::runApp("app")'

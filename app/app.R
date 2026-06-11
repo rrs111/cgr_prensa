@@ -283,6 +283,24 @@ generar_sinteticos <- function() {
     summarise(n = n_distinct(id), .groups = "drop") |>
     arrange(semana, desc(n))
 
+  # red de co-ocurrencia sintética: 30 palabras en círculo + aristas aleatorias
+  red_palabras <- sample(vocab, min(30, length(vocab)))
+  ang <- seq(0, 2 * pi, length.out = length(red_palabras) + 1)[-1]
+  red_nodos <- tibble(
+    palabra = red_palabras,
+    x = cos(ang) + rnorm(length(ang), sd = 0.08),
+    y = sin(ang) + rnorm(length(ang), sd = 0.08),
+    peso = sample(50:300, length(red_palabras), replace = TRUE)
+  )
+  combos <- expand.grid(palabra_a = red_palabras, palabra_b = red_palabras,
+                        stringsAsFactors = FALSE) |>
+    filter(palabra_a < palabra_b)
+  red_aristas <- combos |>
+    sample_n(60) |>
+    mutate(peso = sample(5:50, 60, replace = TRUE)) |>
+    left_join(red_nodos |> select(palabra, x0 = x, y0 = y), by = c("palabra_a" = "palabra")) |>
+    left_join(red_nodos |> select(palabra, x1 = x, y1 = y), by = c("palabra_b" = "palabra"))
+
   # postura LLM sintética: distribución distinta a la del tono léxico, para que
   # en demo se note que son métricas diferentes (más desfavorables)
   postura_articulo <- datos |>
@@ -305,6 +323,7 @@ generar_sinteticos <- function() {
        postura_articulo = postura_articulo, postura_semana = postura_semana, postura_fuente = postura_fuente,
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
+       red_nodos = red_nodos, red_aristas = red_aristas,
        metricas = metricas, sintetico = TRUE)
 }
 
@@ -354,6 +373,14 @@ cargar_todo <- function() {
   if (is.null(entidades_semana))  entidades_semana <- tibble(semana = as.Date(character()),
        entidad = character(), tipo = character(), n = integer())
 
+  red_nodos   <- cargar_archivo("cgr_red_nodos.parquet")
+  red_aristas <- cargar_archivo("cgr_red_aristas.parquet")
+  if (is.null(red_nodos))   red_nodos   <- tibble(palabra = character(), x = numeric(),
+                                                  y = numeric(), peso = numeric())
+  if (is.null(red_aristas)) red_aristas <- tibble(palabra_a = character(), palabra_b = character(),
+                                                  peso = numeric(), x0 = numeric(), y0 = numeric(),
+                                                  x1 = numeric(), y1 = numeric())
+
   # Postura hacia la CGR (LLM) — métrica opcional generada localmente
   postura_articulo <- cargar_archivo("cgr_postura_articulo.parquet")
   postura_semana   <- cargar_archivo("cgr_postura_semana.parquet") |> recortar_monitoreo("semana")
@@ -371,6 +398,7 @@ cargar_todo <- function() {
        postura_articulo = postura_articulo, postura_semana = postura_semana, postura_fuente = postura_fuente,
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
+       red_nodos = red_nodos, red_aristas = red_aristas,
        metricas = metricas, sintetico = FALSE)
 }
 
@@ -531,6 +559,12 @@ ui <- page_navbar(
                     min = rango_fechas[1], max = rango_fechas[2],
                     value = rango_fechas, timeFormat = "%b %Y")
       ),
+      card(card_header("Red de co-ocurrencia (qué palabras aparecen juntas)"),
+           withSpinner(plotlyOutput("g_red", height = 520)),
+           div(class = "cgr-footer", style = "text-align:left;",
+               "Top 50 términos por fuerza de co-ocurrencia (ventana de 5 ",
+               "palabras). Layout Fruchterman-Reingold. Tamaño del nodo y grosor ",
+               "de la arista proporcionales al peso.")),
       card(card_header("Evolución temporal de términos"),
            withSpinner(plotlyOutput("g_tendencia", height = 380))),
       card(card_header("Palabras emergentes (últimas 2 semanas vs. anteriores)"),
@@ -927,6 +961,41 @@ server <- function(input, output, session) {
             hovertemplate = "%{y}: %{x:+d} menciones<extra></extra>") |>
       estilo_plotly(leyenda = FALSE) |>
       layout(xaxis = list(title = "Cambio en menciones"), yaxis = list(title = ""))
+  })
+
+  # ----- Red de co-ocurrencia (Tendencias) -----
+  output$g_red <- renderPlotly({
+    nodos <- D$red_nodos
+    aristas <- D$red_aristas
+    validate(need(nrow(nodos) > 0 && nrow(aristas) > 0,
+                  "Sin datos de red — corre `Rscript cgr_procesar.R`"))
+    # aristas como líneas con NA entre cada par (técnica estándar plotly)
+    ex <- as.vector(rbind(aristas$x0, aristas$x1, NA))
+    ey <- as.vector(rbind(aristas$y0, aristas$y1, NA))
+    # tamaño nodos escalado y label
+    s_max <- max(nodos$peso, na.rm = TRUE)
+    nodos <- nodos |> mutate(size = 10 + 35 * peso / s_max)
+    plot_ly() |>
+      add_trace(x = ex, y = ey, type = "scatter", mode = "lines",
+                line = list(color = "rgba(27,31,73,0.18)", width = 1.2),
+                hoverinfo = "skip", showlegend = FALSE) |>
+      add_trace(x = nodos$x, y = nodos$y, type = "scatter", mode = "markers+text",
+                marker = list(size = nodos$size, color = COL_TEAL,
+                              line = list(color = COL_NAVY, width = 1.5),
+                              opacity = 0.85),
+                text = nodos$palabra, textposition = "top center",
+                textfont = list(family = "DM Sans, sans-serif",
+                                size = 12, color = COL_NAVY),
+                hovertemplate = paste0("<b>%{text}</b><br>peso: ",
+                                       round(nodos$peso, 0), "<extra></extra>"),
+                showlegend = FALSE) |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(
+        xaxis = list(title = "", showgrid = FALSE, zeroline = FALSE,
+                     showticklabels = FALSE),
+        yaxis = list(title = "", showgrid = FALSE, zeroline = FALSE,
+                     showticklabels = FALSE)
+      )
   })
 
   # ===== FUENTES =====

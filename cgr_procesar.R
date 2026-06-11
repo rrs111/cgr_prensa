@@ -8,10 +8,10 @@
 #   3. Conteos por semana / fuente
 #   4. Tono / sentimiento de la cobertura (léxico ES)
 #   6. Actores / entidades nombradas (NER con udpipe)
+#   7. Red de co-ocurrencia (qué términos aparecen juntos)
 #
-# (Los pasos 5-temas y 7-red se retiraron de la app por poco pertinentes para
-#  la oficina de medios y poco confiables con un corpus aún chico; sus scripts
-#  siguen en procesamiento/ y pueden correrse a mano si se quieren de vuelta.)
+# (El paso 5-temas se retiró de la app por poco pertinente para la oficina de
+#  medios; su script sigue en procesamiento/ y puede correrse a mano.)
 #
 # Uso:  Rscript cgr_procesar.R
 
@@ -28,6 +28,7 @@ source("procesamiento/cgr_p2_tokenizar.R")       # -> datos/cgr_palabras.parquet
 source("procesamiento/cgr_p3_contar_palabras.R") # -> conteos por semana/fuente
 source("procesamiento/cgr_p4_sentimiento.R")     # -> tono por noticia/semana/fuente
 source("procesamiento/cgr_p6_actores.R")         # -> entidades (NER con udpipe)
+source("procesamiento/cgr_p7_red.R")             # -> co-ocurrencia + red precomputada
 
 tiempo <- round(difftime(now(), inicio, units = "mins"), 2)
 message(glue::glue("\n==== Procesamiento completo en {tiempo} min ===="))
