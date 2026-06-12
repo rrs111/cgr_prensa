@@ -53,6 +53,7 @@ cgr_prensa/
 │   ├── cgr_scraping_funciones.R # motor de scraping (polite + rvest + chromote + RSS)
 │   ├── cgr_obtener_emol.R       # un módulo por medio (17 en total)
 │   ├── cgr_obtener_googlenews.R # Google News RSS: medios con paywall/Cloudflare
+│   ├── cgr_obtener_twitter.R    # Twitter/X vía API oficial v2 (cuota gratuita)
 │   └── ...
 ├── procesamiento/
 │   ├── cgr_p1_cargar_datos.R    # cargar + limpiar + dedup + FILTRO CGR + corte temporal
@@ -161,6 +162,35 @@ Los selectores CSS fueron verificados visitando cada sitio en vivo
 > descubrimiento: cada nota se scrapea completa del sitio del medio (con cuerpo,
 > salvo paywall). Se activa con `bing_dominio = "medio.cl"` en el módulo.
 >
+### Twitter/X (ScrapeBadger o API oficial v2)
+
+`cgr_obtener_twitter.R` captura tuits sobre la CGR con los términos núcleo del
+monitor (`contraloría`, `contralor(a)`, `Dorothy Pérez`, menciones a
+`@Contraloriacl`), **anclados a Chile** (hay contralorías en Colombia, Perú,
+Panamá, Ecuador… y sus tuits rara vez nombran su país), sin retuits ni
+respuestas de hilos, solo en español. Soporta dos backends:
+
+1. **ScrapeBadger** (preferido si hay `SCRAPEBADGER_API_KEY`, guardada en
+   `.Renviron` que está en `.gitignore`): endpoint
+   `/v1/twitter/tweets/advanced_search`, ~20 tuits por página (~21 créditos),
+   paginación por cursor hasta `CGR_TW_MAX` (def. 50). Sin tope mensual de
+   lectura, solo el saldo de créditos.
+2. **API oficial de X v2** (`X_BEARER_TOKEN`, respaldo): plan gratuito de ~100
+   tuits leídos/mes con presupuesto controlado por el módulo (`CGR_TW_CUOTA`)
+   y `since_id` para no releer.
+
+El módulo **no corre con el orquestador por defecto** (el bot diario gastaría
+los créditos/cuota): se corre **una vez por semana** a mano o por cron.
+
+```bash
+Rscript scraping/cgr_obtener_twitter.R     # lee la key desde .Renviron
+```
+
+Acumula en `datos/cgr_tweets.parquet` (dedup por id y por autor+texto, filtro
+fino anti-otros-países), que la app muestra en la pestaña **Twitter/X**. Como
+las APIs de X cuestan, es una *muestra* de la conversación (decenas de tuits
+por corrida), no un censo.
+
 > **chromote** necesita Chrome/Chromium instalado (`brew install --cask google-chrome`;
 > los workflows de GitHub Actions ya lo instalan). En entornos restringidos/CI se
 > lanza con `--no-sandbox`. **La Tercera** funciona así. Los módulos directos de
@@ -223,7 +253,7 @@ Rscript cgr_procesar.R    # recalcula tokens/conteos
 
 ## App Shiny
 
-6 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
+7 pestañas, gráficos interactivos con **`{plotly}`** y estética corporativa CGR
 (paleta **Navy `#1B1F49` / Teal `#74CEC4` / Rosa `#F2567A` / Crema `#F4F2E5`**,
 tipografías **DM Sans** + **DM Serif Display**). Los análisis solo muestran
 cobertura **desde mayo de 2026** (inicio del scraping propio):
@@ -244,6 +274,10 @@ cobertura **desde mayo de 2026** (inicio del scraping propio):
 6. **Noticias** — buscador con filtros y tabla con enlaces (badge de tono por
    noticia) + **KWIC** (palabra en contexto): frases reales donde aparece un
    término, con resaltado e insensible a tildes.
+7. **Twitter/X** — muestra semanal de tuits sobre la CGR vía la API oficial de
+   X (plan gratuito ≈25 tuits/semana): tuits por semana, cuentas más activas y
+   tabla ordenada por interacciones. Si aún no hay captura real, muestra datos
+   de demostración con un aviso.
 
 > La pestaña de **Temas** (stm) se retiró de la app: con un corpus aún chico
 > daba resultados poco confiables y poco pertinentes para la oficina de medios.

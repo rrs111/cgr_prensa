@@ -170,6 +170,41 @@ cargar_archivo <- function(nombre) {
   NULL
 }
 
+# Tuits sintéticos de demostración: muestra chica, como la que permite la
+# cuota del plan gratuito de la API de X (~25 tuits/semana). Se usan tanto en
+# el modo demo completo como cuando aún no hay captura real de Twitter (para
+# previsualizar la pestaña; la app lo indica claramente).
+generar_tweets_demo <- function() {
+  set.seed(2027)
+  tw_cuentas <- c("Contraloriacl", "fiscaliza_cl", "ojoconlaplata", "transparentemos",
+                  "biobio", "Cooperativa_FM", "T13", "PrensaRegional")
+  tw_frases <- c(
+    "Contraloría detecta irregularidades en licitación municipal",
+    "Dorothy Pérez anuncia plan de fiscalización a gobiernos regionales",
+    "Informe de la CGR revela gastos sin rendir en programa social",
+    "La Contraloría tomó razón del decreto tras semanas de revisión",
+    "Auditoría de la CGR cuestiona uso de fondos en salud",
+    "Contraloría instruye sumario por viáticos sin respaldo",
+    "La contralora expone ante la comisión de la Cámara",
+    "CGR ordena devolver sueldos pagados en exceso en municipio"
+  )
+  semanas <- floor_date(today(), "week", week_start = 1) - weeks(8:0)
+  n_tw <- 48
+  tibble(
+    id = sprintf("twsyn%03d", 1:n_tw),
+    autor = sample(tw_cuentas, n_tw, replace = TRUE),
+    semana = sample(semanas, n_tw, replace = TRUE),
+    texto = paste(sample(tw_frases, n_tw, replace = TRUE), "#Contraloría")
+  ) |>
+    mutate(
+      fecha = pmin(semana + days(sample(0:6, n_tw, replace = TRUE)), today()),
+      autor_nombre = autor,
+      likes = rpois(n_tw, 25), retweets = rpois(n_tw, 8),
+      respuestas = rpois(n_tw, 4), citas = rpois(n_tw, 1),
+      url = paste0("https://x.com/", autor, "/status/17", sprintf("%010d", 1:n_tw))
+    )
+}
+
 # --- generador de datos sintéticos coherentes -------------------------------
 generar_sinteticos <- function() {
   set.seed(2026)
@@ -324,6 +359,7 @@ generar_sinteticos <- function() {
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
        red_nodos = red_nodos, red_aristas = red_aristas,
+       tweets = generar_tweets_demo(), tweets_demo = TRUE,
        metricas = metricas, sintetico = TRUE)
 }
 
@@ -392,6 +428,17 @@ cargar_todo <- function() {
   if (is.null(postura_fuente))   postura_fuente <- tibble(fuente = character(), n = integer(),
        pct_desfavorable = numeric(), pct_favorable = numeric())
 
+  # Tuits sobre la CGR (API oficial de X, cuota gratuita) — métrica opcional.
+  # Si todavía no hay captura real, se muestran tuits de DEMOSTRACIÓN para
+  # previsualizar la pestaña (la app lo indica con un aviso).
+  tweets <- cargar_archivo("cgr_tweets.parquet") |> recortar_monitoreo("fecha")
+  tweets_demo <- is.null(tweets) || nrow(tweets) == 0
+  if (tweets_demo) {
+    tweets <- generar_tweets_demo()
+  } else if (!"semana" %in% names(tweets)) {
+    tweets <- tweets |> mutate(semana = floor_date(as.Date(fecha), "week", week_start = 1))
+  }
+
   list(datos = datos, palabras_semana = palabras_semana,
        noticias_semana = noticias_semana,
        tono_semana = tono_semana, tono_fuente = tono_fuente, tono_articulo = tono_articulo,
@@ -399,6 +446,7 @@ cargar_todo <- function() {
        entidades = entidades, entidades_resumen = entidades_resumen,
        entidades_semana = entidades_semana,
        red_nodos = red_nodos, red_aristas = red_aristas,
+       tweets = tweets, tweets_demo = tweets_demo,
        metricas = metricas, sintetico = FALSE)
 }
 
@@ -610,6 +658,32 @@ ui <- page_navbar(
            div(class = "cgr-footer", style = "text-align:left;",
                "Frases reales del cuerpo de las noticias donde aparece el ",
                "término. Útil para entender el sentido y el tono del uso."))
+    )
+  ),
+
+  # ---- 7. TWITTER/X ----
+  nav_panel(
+    "Twitter/X", icon = icon("twitter"),
+    div(class = "container-fluid",
+      uiOutput("tw_metricas_ui"),
+      layout_columns(
+        col_widths = c(7, 5),
+        card(card_header("Tuits sobre la CGR por semana"),
+             withSpinner(plotlyOutput("tw_semana", height = 320), proxy.height = "320px")),
+        card(card_header("Cuentas con más tuits capturados"),
+             withSpinner(plotlyOutput("tw_autores", height = 320)))
+      ),
+      card(card_header("Tuits capturados (ordenados por interacciones)"),
+           withSpinner(DTOutput("tw_tabla"))),
+      div(class = "cgr-footer", style = "text-align:left;",
+          "Búsqueda en X con los términos del monitor (Contraloría, contralor(a), ",
+          "Dorothy Pérez, @Contraloriacl) anclada a Chile —hay contralorías en ",
+          "varios países—, sin retuits ni respuestas de hilos. Por el costo de las ",
+          "APIs de X, esto es una MUESTRA acotada de la conversación (decenas de ",
+          "tuits por semana), no un censo. Captura semanal con ",
+          tags$code("Rscript scraping/cgr_obtener_twitter.R"),
+          " (vía ScrapeBadger con ", tags$code("SCRAPEBADGER_API_KEY"),
+          ", o API oficial de X con ", tags$code("X_BEARER_TOKEN"), ").")
     )
   ),
 
@@ -1094,6 +1168,91 @@ server <- function(input, output, session) {
               colnames = c("Fecha", "Fuente", "Contexto"),
               options = list(pageLength = 10, dom = "tp",
                 columnDefs = list(list(width = "65%", targets = 2)),
+                language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
+  })
+
+  # ===== TWITTER/X =====
+  hay_tweets <- reactive(!is.null(D$tweets) && nrow(D$tweets) > 0)
+  msg_sin_tweets <- paste(
+    "Aún no hay tuits capturados: define X_BEARER_TOKEN y corre",
+    "Rscript scraping/cgr_obtener_twitter.R (≈25 tuits/semana, plan gratuito)."
+  )
+
+  output$tw_metricas_ui <- renderUI({
+    if (!hay_tweets()) {
+      return(div(class = "cgr-footer", style = "text-align:left;", msg_sin_tweets))
+    }
+    tw <- D$tweets
+    fmt <- function(x) formatC(as.integer(x), big.mark = ".", format = "d")
+    interacciones <- sum(tw$likes, tw$retweets, tw$respuestas, tw$citas, na.rm = TRUE)
+    esta_semana <- sum(tw$semana == floor_date(today(), "week", week_start = 1), na.rm = TRUE)
+    aviso_demo <- if (isTRUE(D$tweets_demo)) {
+      div(style = paste0("background:rgba(242,86,122,0.12);border:1px solid ", COL_ROSA,
+                         ";border-radius:8px;padding:8px 14px;margin-bottom:12px;",
+                         "font-size:0.85rem;color:", COL_NAVY, ";"),
+          tags$strong("Datos de demostración. "),
+          "Aún no hay captura real de X: define la credencial (SCRAPEBADGER_API_KEY ",
+          "o X_BEARER_TOKEN) y corre ",
+          tags$code("Rscript scraping/cgr_obtener_twitter.R"),
+          " para reemplazar esta vista con tuits reales.")
+    }
+    tagList(
+      aviso_demo,
+      layout_columns(
+        col_widths = c(3, 3, 3, 3),
+        metrica_box(fmt(nrow(tw)), "Tuits capturados", "navy"),
+        metrica_box(fmt(esta_semana), "Esta semana", "rosa"),
+        metrica_box(fmt(interacciones), "Interacciones (likes+RT+resp.)", "teal"),
+        metrica_box(format(max(as.Date(tw$fecha), na.rm = TRUE), "%d %b %Y"),
+                    "Último tuit", "teal")
+      )
+    )
+  })
+
+  output$tw_semana <- renderPlotly({
+    validate(need(hay_tweets(), msg_sin_tweets))
+    # eje categórico (no fecha): con pocas semanas plotly desfigura el eje date
+    d <- D$tweets |> count(semana, name = "n") |> arrange(semana) |>
+      mutate(etiqueta = factor(format(semana, "Sem. %d %b"),
+                               levels = format(semana, "Sem. %d %b")))
+    plot_ly(d, x = ~etiqueta, y = ~n, type = "bar",
+            marker = list(color = COL_TEAL, line = list(color = COL_NAVY, width = 1)),
+            hovertemplate = "%{x}<br>%{y} tuits<extra></extra>") |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = ""), yaxis = list(title = "Tuits"))
+  })
+
+  output$tw_autores <- renderPlotly({
+    validate(need(hay_tweets(), msg_sin_tweets))
+    d <- D$tweets |> count(autor, sort = TRUE, name = "n") |> head(10) |>
+      mutate(autor = factor(paste0("@", autor), levels = rev(paste0("@", autor))))
+    plot_ly(d, x = ~n, y = ~autor, type = "bar", orientation = "h",
+            marker = list(color = COL_NAVY),
+            hovertemplate = "%{y}: %{x} tuits<extra></extra>") |>
+      estilo_plotly(leyenda = FALSE) |>
+      layout(xaxis = list(title = "Tuits"), yaxis = list(title = ""))
+  })
+
+  output$tw_tabla <- renderDT({
+    validate(need(hay_tweets(), msg_sin_tweets))
+    d <- D$tweets |>
+      mutate(interacciones = coalesce(likes, 0L) + coalesce(retweets, 0L) +
+               coalesce(respuestas, 0L) + coalesce(citas, 0L)) |>
+      arrange(desc(interacciones)) |>
+      transmute(
+        fecha = format(as.Date(fecha), "%Y-%m-%d"),
+        cuenta = paste0("<a href='https://x.com/", autor, "' target='_blank'>@",
+                        htmltools::htmlEscape(autor), "</a>"),
+        tuit = ifelse(is.na(url) | !startsWith(url, "http"),
+                      htmltools::htmlEscape(texto),
+                      paste0("<a href='", url, "' target='_blank'>",
+                             htmltools::htmlEscape(texto), "</a>")),
+        likes = likes, rt = retweets, respuestas = respuestas
+      )
+    datatable(d, rownames = FALSE, escape = FALSE,
+              colnames = c("Fecha", "Cuenta", "Tuit", "Likes", "RT", "Respuestas"),
+              options = list(pageLength = 15,
+                columnDefs = list(list(width = "55%", targets = 2)),
                 language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json")))
   })
 

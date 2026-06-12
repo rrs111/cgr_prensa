@@ -45,6 +45,13 @@ modulos_js <- c("latercera")
 # CGR_FUENTES="df,exante,theclinic" si algún día cambian de plataforma.
 modulos_deshabilitados <- c("df", "exante", "theclinic")
 
+# Fuentes vía API con CUOTA (no corren por defecto: el bot diario agotaría el
+# presupuesto). twitter usa ScrapeBadger (SCRAPEBADGER_API_KEY en .Renviron,
+# ~1 crédito/tuit) o la API oficial de X v2 (X_BEARER_TOKEN, ~100 tuits/mes
+# gratis). Correr 1 vez por semana:
+#   CGR_FUENTES="twitter" Rscript scraping/cgr_scraping.R
+modulos_api <- c("twitter")
+
 modulos <- c(modulos_rvest, modulos_paywall, modulos_rss, modulos_js)
 
 # Permitir limitar a algunas fuentes vía variable de entorno.
@@ -53,7 +60,7 @@ modulos <- c(modulos_rvest, modulos_paywall, modulos_rss, modulos_js)
 sel <- Sys.getenv("CGR_FUENTES", "")
 if (nzchar(sel)) {
   pedidas <- trimws(strsplit(sel, ",")[[1]])
-  modulos <- intersect(pedidas, c(modulos, modulos_deshabilitados))
+  modulos <- intersect(pedidas, c(modulos, modulos_deshabilitados, modulos_api))
 }
 
 # Ejecución --------------------------------------------------------------------
