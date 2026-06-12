@@ -1,6 +1,6 @@
 # ============================================================================
 # CGR Prensa — App Shiny (Monitor de Medios sobre la Contraloría)
-# Estética corporativa CGR: Navy / Teal / Rosa / Crema · Montserrat + DM Serif
+# Estética corporativa CGR: Navy / Teal / Rosa / Crema · Montserrat
 # Gráficos interactivos con {plotly}. Funciona con datos reales del pipeline
 # o, si no existen, con datos sintéticos de demostración.
 # ============================================================================
@@ -419,7 +419,7 @@ tema <- bs_theme(
   bg = COL_CREMA, fg = COL_NAVY,
   primary = COL_NAVY, secondary = COL_TEAL,
   base_font = font_google("Montserrat"),
-  heading_font = font_google("DM Serif Display")
+  heading_font = font_google("Montserrat")
 )
 
 ui <- page_navbar(
@@ -432,7 +432,7 @@ ui <- page_navbar(
     tags$link(rel = "stylesheet", href = "cgr_styles.css"),
     tags$link(rel = "preconnect", href = "https://fonts.googleapis.com"),
     tags$link(rel = "stylesheet",
-              href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&family=DM+Serif+Display&display=swap")
+              href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap")
   ),
 
   # ---- 1. RESUMEN ----
@@ -614,8 +614,6 @@ ui <- page_navbar(
   ),
 
   nav_spacer(),
-  nav_item(tags$span(class = "navbar-text", style = "color:#74CEC4;font-size:.8rem;",
-                     textOutput("estado_datos", inline = TRUE))),
 
   footer = div(class = "cgr-footer",
     "CGR Prensa · Monitor de cobertura de prensa sobre la Contraloría General de la República · ",
@@ -627,11 +625,6 @@ ui <- page_navbar(
 # SERVER
 # ---------------------------------------------------------------------------
 server <- function(input, output, session) {
-
-  # estado de los datos (real / demo)
-  output$estado_datos <- renderText({
-    if (isTRUE(D$sintetico)) "● datos de demostración" else "● datos reales"
-  })
 
   # ===== RESUMEN =====
   output$metricas_ui <- renderUI({

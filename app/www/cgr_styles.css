@@ -1,7 +1,7 @@
 /* ============================================================
    CGR Prensa — estética corporativa
    Paleta:  Navy #1B1F49 | Teal #74CEC4 | Rosa #F2567A | Crema #F4F2E5
-   Tipografía: Montserrat (cuerpo) + DM Serif Display (títulos)
+   Tipografía: Montserrat (cuerpo y títulos)
    ============================================================ */
 
 :root {
@@ -21,7 +21,8 @@ body, .bslib-page-navbar {
 }
 
 h1, h2, h3, h4, .cgr-titulo, .navbar-brand {
-  font-family: 'DM Serif Display', Georgia, serif !important;
+  font-family: 'Montserrat', system-ui, sans-serif !important;
+  font-weight: 700;
   color: var(--cgr-navy);
   letter-spacing: 0.2px;
 }
@@ -68,7 +69,8 @@ a:hover { color: var(--cgr-navy); }
 .card-header, .bslib-card > .card-header {
   background: #ffffff;
   border-bottom: 2px solid var(--cgr-crema);
-  font-family: 'DM Serif Display', serif;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
   color: var(--cgr-navy);
   font-size: 1.1rem;
 }
@@ -82,7 +84,8 @@ a:hover { color: var(--cgr-navy); }
   border-left: 6px solid var(--cgr-teal);
 }
 .cgr-metrica .valor {
-  font-family: 'DM Serif Display', serif;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700;
   font-size: 2.2rem;
   line-height: 1;
   color: var(--cgr-navy);
