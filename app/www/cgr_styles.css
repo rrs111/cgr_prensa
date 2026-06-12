@@ -1,7 +1,7 @@
 /* ============================================================
    CGR Prensa — estética corporativa
    Paleta:  Navy #1B1F49 | Teal #74CEC4 | Rosa #F2567A | Crema #F4F2E5
-   Tipografía: DM Sans (cuerpo) + DM Serif Display (títulos)
+   Tipografía: Montserrat (cuerpo) + DM Serif Display (títulos)
    ============================================================ */
 
 :root {
@@ -16,7 +16,7 @@
 /* ---------- base ---------- */
 body, .bslib-page-navbar {
   background-color: var(--cgr-crema) !important;
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'Montserrat', system-ui, sans-serif;
   color: var(--cgr-navy);
 }
 
@@ -130,7 +130,7 @@ table.dataTable thead th {
   background-color: var(--cgr-navy) !important;
   color: #ffffff !important;
   border-bottom: none !important;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Montserrat', sans-serif;
 }
 table.dataTable tbody tr:hover { background-color: rgba(116,206,196,0.18) !important; }
 .dataTables_wrapper .dataTables_paginate .paginate_button.current {

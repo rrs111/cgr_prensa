@@ -1,6 +1,6 @@
 # ============================================================================
 # CGR Prensa — App Shiny (Monitor de Medios sobre la Contraloría)
-# Estética corporativa CGR: Navy / Teal / Rosa / Crema · DM Sans + DM Serif
+# Estética corporativa CGR: Navy / Teal / Rosa / Crema · Montserrat + DM Serif
 # Gráficos interactivos con {plotly}. Funciona con datos reales del pipeline
 # o, si no existen, con datos sintéticos de demostración.
 # ============================================================================
@@ -44,13 +44,13 @@ estilo_plotly <- function(p, leyenda = TRUE) {
     layout(
       paper_bgcolor = "rgba(0,0,0,0)",
       plot_bgcolor  = "rgba(0,0,0,0)",
-      font = list(family = "DM Sans, sans-serif", color = COL_NAVY, size = 13),
+      font = list(family = "Montserrat, sans-serif", color = COL_NAVY, size = 13),
       xaxis = list(gridcolor = "rgba(27,31,73,0.08)", zeroline = FALSE),
       yaxis = list(gridcolor = "rgba(27,31,73,0.08)", zeroline = FALSE),
       showlegend = leyenda,
       legend = list(orientation = "h", y = -0.2),
       margin = list(t = 30, r = 10, b = 40, l = 50),
-      hoverlabel = list(font = list(family = "DM Sans, sans-serif"))
+      hoverlabel = list(font = list(family = "Montserrat, sans-serif"))
     ) |>
     config(displayModeBar = FALSE)
 }
@@ -105,7 +105,7 @@ nube_plotly <- function(d, n_palabras = 45) {
 
   plot_ly(
     x = px, y = py, type = "scatter", mode = "text",
-    text = d$palabra, textfont = list(size = size, color = col, family = "DM Sans, sans-serif"),
+    text = d$palabra, textfont = list(size = size, color = col, family = "Montserrat, sans-serif"),
     hovertext = paste0(d$palabra, ": ", d$freq), hoverinfo = "text"
   ) |>
     layout(
@@ -418,7 +418,7 @@ tema <- bs_theme(
   version = 5,
   bg = COL_CREMA, fg = COL_NAVY,
   primary = COL_NAVY, secondary = COL_TEAL,
-  base_font = font_google("DM Sans"),
+  base_font = font_google("Montserrat"),
   heading_font = font_google("DM Serif Display")
 )
 
@@ -432,7 +432,7 @@ ui <- page_navbar(
     tags$link(rel = "stylesheet", href = "cgr_styles.css"),
     tags$link(rel = "preconnect", href = "https://fonts.googleapis.com"),
     tags$link(rel = "stylesheet",
-              href = "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Serif+Display&display=swap")
+              href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&family=DM+Serif+Display&display=swap")
   ),
 
   # ---- 1. RESUMEN ----
@@ -532,13 +532,7 @@ ui <- page_navbar(
              withSpinner(plotlyOutput("act_evolucion", height = 460)))
       ),
       card(card_header("Detalle de actores"),
-           withSpinner(DTOutput("act_tabla"))),
-      div(class = "cgr-footer", style = "text-align:left;",
-          "NER vía {udpipe} (modelo spanish-gsd) sobre título + bajada. ",
-          "Personas, organizaciones, lugares y cargos. Los nombres de los ",
-          "medios y la propia CGR se excluyen del listado por ser sujetos, ",
-          "no actores de la noticia. La precisión es razonable sin LLM; ",
-          "puede haber alguna mala clasificación (p. ej. apellidos sueltos).")
+           withSpinner(DTOutput("act_tabla")))
     )
   ),
 
@@ -984,7 +978,7 @@ server <- function(input, output, session) {
                               line = list(color = COL_NAVY, width = 1.5),
                               opacity = 0.85),
                 text = nodos$palabra, textposition = "top center",
-                textfont = list(family = "DM Sans, sans-serif",
+                textfont = list(family = "Montserrat, sans-serif",
                                 size = 12, color = COL_NAVY),
                 hovertemplate = paste0("<b>%{text}</b><br>peso: ",
                                        round(nodos$peso, 0), "<extra></extra>"),
